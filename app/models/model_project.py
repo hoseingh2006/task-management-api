@@ -1,0 +1,40 @@
+from sqlalchemy import (
+    INTEGER,
+    DateTime,
+    VARCHAR,
+    TEXT,
+    func,
+    ForeignKey,
+    UniqueConstraint,
+)
+from datetime import datetime
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from database.database import Base
+from models.model_user import User
+from models.model_task import Task
+
+
+class Project(Base):
+    __tablename__ = "project"
+    id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
+    name: Mapped[str] = mapped_column(VARCHAR(250), index=True)
+    description: Mapped[str] = mapped_column(TEXT, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+    members: Mapped[list["ProjectMembers"]] = relationship(back_populates="project")
+    tasks: Mapped[list["Task"]] = relationship(back_populates="project")
+
+
+class ProjectMembers(Base):
+    __tablename__ = "project_members"
+    id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    role: Mapped[str] = mapped_column(VARCHAR(250), index=True, default="viewer")
+    project: Mapped[list["Project"]] = relationship(back_populates="members")
+    user: Mapped[list["User"]] = relationship(back_populates="project_members")
+    __table_args__ = (UniqueConstraint("project_id", "user_id"),)
