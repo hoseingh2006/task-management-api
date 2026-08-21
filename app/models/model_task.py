@@ -1,4 +1,4 @@
-from sqlalchemy import INTEGER, VARCHAR, TEXT, ForeignKey
+from sqlalchemy import INTEGER, VARCHAR, TEXT, ForeignKey, BOOLEAN
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database.database import Base
@@ -14,6 +14,7 @@ class Task(Base):
     project_id: Mapped[int] = mapped_column(ForeignKey("project.id"))
     creator_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
     assignee_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    is_active: Mapped[bool] = mapped_column(BOOLEAN, default=True)
     project: Mapped["Project"] = relationship(back_populates="tasks")
 
     creator: Mapped["User"] = relationship(

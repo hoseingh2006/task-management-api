@@ -17,6 +17,11 @@ async def check_user(db: Datatbase, username: str, password: str):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
+    if user.is_active == False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been deactivated. Please contact support.",
+        )
     if verify_pass(user.password_hash, password):
         return user
     raise HTTPException(

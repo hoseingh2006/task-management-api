@@ -43,10 +43,10 @@ async def get_user(current_user: GetUser):
 
 
 async def updeate_password(
-    passsword_model: UserPasswordModel, db: Datatbase, current_user: GetUser
+    password_model: UserPasswordModel, db: Datatbase, current_user: GetUser
 ):
-    if verify_pass(current_user.password_hash, passsword_model.old_password):
-        current_user.password_hash = Password_hash.hash(passsword_model.new_password)
+    if verify_pass(current_user.password_hash, password_model.old_password):
+        current_user.password_hash = Password_hash.hash(password_model.new_password)
         await db.commit()
         await db.refresh(current_user)
         return {"massage": "successfully password updated!"}
