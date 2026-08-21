@@ -1,9 +1,8 @@
+from database.dependancy import Datatbase, GetAdmin
 from fastapi import APIRouter
-from database.dependancy import Datatbase
-from starlette import status
-from services import service_admin
-from database.dependancy import GetAdmin
 from schemas.schema_admin import UserUpdeateAdminModel, UserUpdeateAdminPasswordModel
+from services import service_admin
+from starlette import status
 
 route = APIRouter()
 

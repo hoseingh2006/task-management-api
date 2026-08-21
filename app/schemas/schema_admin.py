@@ -1,5 +1,5 @@
-from pydantic import BaseModel
 from models.model_user import UserRole
+from pydantic import BaseModel
 
 
 class UserUpdeateAdminModel(BaseModel):

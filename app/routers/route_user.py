@@ -1,9 +1,8 @@
-from fastapi import APIRouter, HTTPException
-from schemas.schema_user import UserModel, UpdeateUserModel, UserPasswordModel
-from database.dependancy import Datatbase
-from starlette import status
+from database.dependancy import Datatbase, GetUser
+from fastapi import APIRouter
+from schemas.schema_user import UpdeateUserModel, UserModel, UserPasswordModel
 from services import service_user
-from database.dependancy import GetUser
+from starlette import status
 
 route = APIRouter()
 

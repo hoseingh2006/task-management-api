@@ -1,19 +1,20 @@
+from datetime import datetime
+from enum import Enum
+
+from database.database import Base
+from models.model_task import Task
+from models.model_user import User
 from sqlalchemy import (
-    INTEGER,
-    DateTime,
-    VARCHAR,
-    TEXT,
     BOOLEAN,
-    func,
+    INTEGER,
+    TEXT,
+    VARCHAR,
+    DateTime,
     ForeignKey,
     UniqueConstraint,
+    func,
 )
-from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from database.database import Base
-from models.model_user import User
-from models.model_task import Task
-from enum import Enum
 
 
 class ProjectRole(str, Enum):
@@ -56,6 +57,6 @@ class ProjectMembers(Base):
     role: Mapped[ProjectRole] = mapped_column(
         Enum(ProjectRole), default=ProjectRole.MEMBER
     )
-    project: Mapped[list["Project"]] = relationship(back_populates="members")
-    user: Mapped[list["User"]] = relationship(back_populates="project_members")
+    project: Mapped["Project"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship(back_populates="project_members")
     __table_args__ = (UniqueConstraint("project_id", "user_id"),)

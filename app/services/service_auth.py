@@ -1,12 +1,13 @@
-from fastapi import HTTPException
-from database.dependancy import Datatbase
+from datetime import datetime, timedelta, timezone
+
 import jwt
-from starlette import status
+from core.config import settings
+from core.security import verify_pass
+from database.dependancy import Datatbase
+from fastapi import HTTPException
 from models.model_user import User
 from sqlalchemy import select
-from core.security import verify_pass
-from datetime import timedelta, datetime, timezone
-from core.config import settings
+from starlette import status
 
 
 async def check_user(db: Datatbase, username: str, password: str):

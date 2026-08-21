@@ -1,10 +1,9 @@
-from schemas.schema_user import UserModel, UpdeateUserModel, UserPasswordModel
-from database.dependancy import Datatbase
-from models.model_user import User
-from database.dependancy import GetUser
-from fastapi import HTTPException
-from starlette import status
 from core.security import Password_hash, verify_pass
+from database.dependancy import Datatbase, GetUser
+from fastapi import HTTPException
+from models.model_user import User
+from schemas.schema_user import UpdeateUserModel, UserModel, UserPasswordModel
+from starlette import status
 
 
 async def create_user(user_model: UserModel, db: Datatbase):

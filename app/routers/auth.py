@@ -1,9 +1,8 @@
+from database.dependancy import Datatbase, FormData
 from fastapi import APIRouter, HTTPException
-from database.dependancy import Datatbase
-from starlette import status
 from schemas.schema_auth import Token
-from services.service_auth import create_access_token, check_user
-from database.dependancy import FormData
+from services.service_auth import check_user, create_access_token
+from starlette import status
 
 route = APIRouter()
 

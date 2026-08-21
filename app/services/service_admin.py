@@ -1,14 +1,17 @@
+from core.security import Password_hash
 from database.dependancy import Datatbase
-from models.model_user import User
+from fastapi import HTTPException
 from models.model_project import Project, ProjectMembers
 from models.model_task import Task
-from schemas.schema_admin import UserRole
-from fastapi import HTTPException
-from starlette import status
-from sqlalchemy import select, func
+from models.model_user import User
+from schemas.schema_admin import (
+    UserRole,
+    UserUpdeateAdminModel,
+    UserUpdeateAdminPasswordModel,
+)
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
-from schemas.schema_admin import UserUpdeateAdminModel, UserUpdeateAdminPasswordModel
-from core.security import Password_hash
+from starlette import status
 
 
 ######user############
