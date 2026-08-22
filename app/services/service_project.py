@@ -1,6 +1,6 @@
 from database.dependancy import Datatbase, GetUser
 from fastapi import HTTPException
-from models.model_project import Project, ProjectMembers, ProjectRole
+from models.model_project import Project, ProjectMembers, ProjectRole, ProjectStatus
 from models.model_user import User
 from schemas.schema_project import (
     ProjectMember,
@@ -103,6 +103,7 @@ async def delete_project(current_user: GetUser, db: Datatbase, project_id: int):
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Project not found!")
     project.is_active = False
+    project.status = ProjectStatus.ARCHIVED
     await db.commit()
     await db.refresh(project)
     return {"message": "Project deleted successfully!"}
