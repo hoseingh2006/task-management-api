@@ -2,5 +2,12 @@
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff"
-  }
+  },
+  "cSpell.words": [
+    "autoflush",
+    "onupdate",
+    "pwdlib",
+    "selectinload",
+    "sessionmaker"
+  ]
 }

@@ -1,22 +1,24 @@
-from database.dependancy import Datatbase, GetUser
 from fastapi import HTTPException
-from models.model_project import Project, ProjectMembers, ProjectRole
-from models.model_task import Task, TaskAssignee
-from models.model_user import User
-from schemas.schema_task import (
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from starlette import status
+
+from app.database.dependency import Database, GetUser
+from app.models.model_project import Project, ProjectMembers, ProjectRole
+from app.models.model_task import Task, TaskAssignee
+from app.models.model_user import User
+from app.schemas.schema_task import (
     TaskModel,
     TaskStatus,
     TaskStatusUpdateModel,
     TaskUpdateModel,
 )
-from sqlalchemy import select
-from starlette import status
 
 
 ##########Task Routers##########
 async def create_task(
     task_model: TaskModel,
-    db: Datatbase,
+    db: Database,
     current_user: GetUser,
     project_id: int,
 ):
@@ -107,7 +109,7 @@ async def create_task(
     }
 
 
-async def get_tasks(current_user: GetUser, db: Datatbase, project_id: int):
+async def get_tasks(current_user: GetUser, db: Database, project_id: int):
     project_result = await db.execute(
         select(Project.id, ProjectMembers.role)
         .join(ProjectMembers, Project.id == ProjectMembers.project_id)
@@ -128,16 +130,19 @@ async def get_tasks(current_user: GetUser, db: Datatbase, project_id: int):
         )
         return tasks.all()
     user_task = await db.scalars(
-        select(Task).where(
+        select(Task)
+        .join(TaskAssignee, Task.id == TaskAssignee.task_id)
+        .where(
             Task.project_id == project_id,
-            Task.assignee_id == current_user.id,
+            TaskAssignee.user_id == current_user.id,
+            Task.is_active.is_(True),
         )
     )
     return user_task.all()
 
 
 async def get_task_id(
-    current_user: GetUser, db: Datatbase, project_id: int, task_id: int
+    current_user: GetUser, db: Database, project_id: int, task_id: int
 ):
     project_result = await db.execute(
         select(Project.id, ProjectMembers.role)
@@ -182,7 +187,7 @@ async def get_task_id(
 async def update_task(
     task_model: TaskUpdateModel,
     current_user: GetUser,
-    db: Datatbase,
+    db: Database,
     project_id: int,
     task_id: int,
 ):
@@ -227,7 +232,12 @@ async def update_task(
             detail="You don't have permission to create task",
         )
     result_task = await db.scalars(
-        select(Task).where(Task.project_id == project_id, Task.id == task_id)
+        select(Task)
+        .options(selectinload(Task.assignees))
+        .where(
+            Task.project_id == project_id,
+            Task.id == task_id,
+        )
     )
     task = result_task.first()
     if task is None:
@@ -270,7 +280,7 @@ async def update_task(
 
 
 async def delete_task(
-    current_user: GetUser, db: Datatbase, project_id: int, task_id: int
+    current_user: GetUser, db: Database, project_id: int, task_id: int
 ):
     project_result = await db.execute(
         select(Project.id, ProjectMembers.role)
@@ -310,7 +320,7 @@ async def delete_task(
 async def update_task_status(
     status_model: TaskStatusUpdateModel,
     current_user: GetUser,
-    db: Datatbase,
+    db: Database,
     project_id: int,
     task_id: int,
 ):
@@ -326,11 +336,15 @@ async def update_task_status(
     project = project_result.first()
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found project")
-    if project.role in (
-        ProjectRole.OWNER,
-        ProjectRole.MANAGER,
-        ProjectRole.MEMBER,
-    ):
+    if project.role in (ProjectRole.OWNER, ProjectRole.MANAGER):
+        result = await db.scalars(
+            select(Task).where(
+                Task.project_id == project_id,
+                Task.id == task_id,
+                Task.is_active.is_(True),
+            )
+        )
+    elif project.role == ProjectRole.MEMBER:  # MEMBER
         result = await db.scalars(
             select(Task)
             .join(TaskAssignee, Task.id == TaskAssignee.task_id)
@@ -341,20 +355,20 @@ async def update_task_status(
                 Task.is_active.is_(True),
             )
         )
-        task = result.first()
-        if task is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not find task")
-        if status_model.status in (TaskStatus.COMPLETED, TaskStatus.ACTIVE):
-            task.status = status_model.status
-            await db.commit()
-            await db.refresh(task)
-            return {"message": "successfully update task status "}
-        else:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, detail="for archive use delete endpoint"
-            )
     else:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to update task status",
+        )
+    task = result.first()
+    if task is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not find task")
+    if status_model.status in (TaskStatus.COMPLETED, TaskStatus.ACTIVE):
+        task.status = status_model.status
+        await db.commit()
+        await db.refresh(task)
+        return {"message": "successfully update task status "}
+    else:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="for archive use delete endpoint"
         )

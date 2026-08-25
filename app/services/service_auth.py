@@ -1,16 +1,17 @@
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from core.config import settings
-from core.security import verify_pass
-from database.dependancy import Datatbase
 from fastapi import HTTPException
-from models.model_user import User
 from sqlalchemy import select
 from starlette import status
 
+from app.core.config import settings
+from app.core.security import verify_pass
+from app.database.dependency import Database
+from app.models.model_user import User
 
-async def check_user(db: Datatbase, username: str, password: str):
+
+async def check_user(db: Database, username: str, password: str):
     result = await db.scalars(select(User).where(User.username == username))
     user = result.first()
     if user is None:

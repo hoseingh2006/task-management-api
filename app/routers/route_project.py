@@ -1,12 +1,13 @@
-from database.dependancy import Datatbase, GetUser  # noqa: I001
+from app.database.dependency import Database, GetUser  # noqa: I001
 from fastapi import APIRouter
-from schemas.schema_project import (
+from app.schemas.schema_project import (
     ProjectModel,
     ProjectStatusUpdateModel,
     ProjectUpdateModel,
     ProjectMember,
+    ProjectUpdateMember,
 )
-from services import service_project
+from app.services import service_project
 from starlette import status
 
 route = APIRouter()
@@ -15,7 +16,7 @@ route = APIRouter()
 ##########Project Routers##########
 @route.post("/", status_code=status.HTTP_201_CREATED)
 async def create_project(
-    project_model: ProjectModel, db: Datatbase, current_user: GetUser
+    project_model: ProjectModel, db: Database, current_user: GetUser
 ):
     return await service_project.create_project(
         project_model=project_model, db=db, current_user=current_user
@@ -23,20 +24,22 @@ async def create_project(
 
 
 @route.get("/", status_code=status.HTTP_200_OK)
-async def get_project(current_user: GetUser):
-    return await service_project.get_project(current_user)
+async def get_project(current_user: GetUser, db: Database):
+    return await service_project.get_project(db=db, current_user=current_user)
 
 
 @route.get("/{project_id}", status_code=status.HTTP_200_OK)
-async def get_project_id(current_user: GetUser, project_id: int):
-    return await service_project.get_project_id(current_user, project_id)
+async def get_project_id(current_user: GetUser, db: Database, project_id: int):
+    return await service_project.get_project_id(
+        current_user=current_user, project_id=project_id, db=db
+    )
 
 
 @route.put("/{project_id}", status_code=status.HTTP_200_OK)
 async def update_project(
     project_model: ProjectUpdateModel,
     current_user: GetUser,
-    db: Datatbase,
+    db: Database,
     project_id: int,
 ):
     return await service_project.update_project(
@@ -48,8 +51,10 @@ async def update_project(
 
 
 @route.delete("/{project_id}", status_code=status.HTTP_200_OK)
-async def delete_project(current_user: GetUser, project_id: int):
-    return await service_project.delete_project(current_user, project_id)
+async def delete_project(current_user: GetUser, db: Database, project_id: int):
+    return await service_project.delete_project(
+        current_user, db=db, project_id=project_id
+    )
 
 
 ##########Status Project Routers##########
@@ -57,7 +62,7 @@ async def delete_project(current_user: GetUser, project_id: int):
 async def update_project_status(
     status_model: ProjectStatusUpdateModel,
     current_user: GetUser,
-    db: Datatbase,
+    db: Database,
     project_id: int,
 ):
     return await service_project.update_project_status(
@@ -73,7 +78,7 @@ async def update_project_status(
 async def project_member(
     member_model: ProjectMember,
     current_user: GetUser,
-    db: Datatbase,
+    db: Database,
     project_id: int,
 ):
     return await service_project.project_member(
@@ -86,9 +91,9 @@ async def project_member(
 
 @route.patch("/{project_id}/members/{user_id}", status_code=status.HTTP_200_OK)
 async def project_update_member(
-    member_model: ProjectMember,
+    member_model: ProjectUpdateMember,
     current_user: GetUser,
-    db: Datatbase,
+    db: Database,
     project_id: int,
     user_id: int,
 ):
@@ -104,7 +109,7 @@ async def project_update_member(
 @route.get("/{project_id}/members/", status_code=status.HTTP_200_OK)
 async def get_project_members(
     current_user: GetUser,
-    db: Datatbase,
+    db: Database,
     project_id: int,
 ):
     return await service_project.get_project_members(
@@ -117,7 +122,7 @@ async def get_project_members(
 @route.delete("/{project_id}/members/{user_id}", status_code=status.HTTP_200_OK)
 async def project_delete_member(
     current_user: GetUser,
-    db: Datatbase,
+    db: Database,
     project_id: int,
     user_id: int,
 ):

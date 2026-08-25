@@ -1,8 +1,9 @@
-from models.model_user import UserRole
 from pydantic import BaseModel
 
+from app.models.model_user import UserRole
 
-class UserUpdeateAdminModel(BaseModel):
+
+class UserUpdateAdminModel(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     username: str | None = None
@@ -11,5 +12,5 @@ class UserUpdeateAdminModel(BaseModel):
     is_active: bool | None = None
 
 
-class UserUpdeateAdminPasswordModel(BaseModel):
+class UserUpdateAdminPasswordModel(BaseModel):
     password: str

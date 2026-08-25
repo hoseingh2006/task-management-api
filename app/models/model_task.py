@@ -1,8 +1,10 @@
-from database.database import Base
-from models.model_project import Project
-from models.model_user import User
-from sqlalchemy import BOOLEAN, INTEGER, TEXT, VARCHAR, Enum, ForeignKey
+from enum import Enum
+
+from sqlalchemy import BOOLEAN, INTEGER, TEXT, VARCHAR, ForeignKey
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database.database import Base
 
 
 class TaskStatus(str, Enum):
@@ -18,7 +20,7 @@ class Task(Base):
     description: Mapped[str] = mapped_column(TEXT)
     is_active: Mapped[bool] = mapped_column(BOOLEAN, default=True)
     status: Mapped[TaskStatus] = mapped_column(
-        Enum(TaskStatus), default=TaskStatus.ACTIVE
+        SQLEnum(TaskStatus), default=TaskStatus.ACTIVE
     )
     project_id: Mapped[int] = mapped_column(ForeignKey("project.id"))
     creator_id: Mapped[int] = mapped_column(ForeignKey("user.id"))

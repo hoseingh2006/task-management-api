@@ -1,5 +1,6 @@
-from models.model_project import ProjectRole, ProjectStatus
 from pydantic import BaseModel
+
+from app.models.model_project import ProjectRole, ProjectStatus
 
 
 class ProjectModel(BaseModel):
@@ -18,4 +19,8 @@ class ProjectStatusUpdateModel(BaseModel):
 
 class ProjectMember(BaseModel):
     user_id: int
+    role: ProjectRole
+
+
+class ProjectUpdateMember(BaseModel):
     role: ProjectRole

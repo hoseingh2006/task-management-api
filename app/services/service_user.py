@@ -1,24 +1,23 @@
-from core.security import Password_hash, verify_pass
-from database.dependancy import Datatbase, GetUser
 from fastapi import HTTPException
-from models.model_user import User
-from schemas.schema_user import UpdeateUserModel, UserModel, UserPasswordModel
 from starlette import status
 
+from app.core.security import Password_hash, verify_pass
+from app.database.dependency import Database, GetUser
+from app.models.model_user import User
+from app.schemas.schema_user import UpdateUserModel, UserModel, UserPasswordModel
 
-async def create_user(user_model: UserModel, db: Datatbase):
+
+async def create_user(user_model: UserModel, db: Database):
     data = user_model.model_dump()
     data["password_hash"] = Password_hash.hash(data.pop("password"))
     user = User(**data)
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    return {"massage": "create user successfuly!"}
+    return {"massage": "create user successfully!"}
 
 
-async def updeate_user(
-    user_model: UpdeateUserModel, db: Datatbase, current_user: GetUser
-):
+async def update_user(user_model: UpdateUserModel, db: Database, current_user: GetUser):
     if user_model.first_name is not None:
         current_user.first_name = user_model.first_name
     if user_model.last_name is not None:
@@ -41,8 +40,8 @@ async def get_user(current_user: GetUser):
     }
 
 
-async def updeate_password(
-    password_model: UserPasswordModel, db: Datatbase, current_user: GetUser
+async def update_password(
+    password_model: UserPasswordModel, db: Database, current_user: GetUser
 ):
     if verify_pass(current_user.password_hash, password_model.old_password):
         current_user.password_hash = Password_hash.hash(password_model.new_password)

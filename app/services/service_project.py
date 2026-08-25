@@ -1,20 +1,22 @@
-from database.dependancy import Datatbase, GetUser
 from fastapi import HTTPException
-from models.model_project import Project, ProjectMembers, ProjectRole, ProjectStatus
-from models.model_user import User
-from schemas.schema_project import (
+from sqlalchemy import select
+from starlette import status
+
+from app.database.dependency import Database, GetUser
+from app.models.model_project import Project, ProjectMembers, ProjectRole, ProjectStatus
+from app.models.model_user import User
+from app.schemas.schema_project import (
     ProjectMember,
     ProjectModel,
     ProjectStatusUpdateModel,
+    ProjectUpdateMember,
     ProjectUpdateModel,
 )
-from sqlalchemy import select
-from starlette import status
 
 
 ##########Project Routers##########
 async def create_project(
-    project_model: ProjectModel, db: Datatbase, current_user: GetUser
+    project_model: ProjectModel, db: Database, current_user: GetUser
 ):
     data = project_model.model_dump()
     project = Project(**data)
@@ -32,7 +34,7 @@ async def create_project(
     return {"message": "Project created successfully!"}
 
 
-async def get_project(current_user: GetUser, db: Datatbase):
+async def get_project(current_user: GetUser, db: Database):
     projects = await db.scalars(
         select(Project)
         .join(ProjectMembers, Project.id == ProjectMembers.project_id)
@@ -44,7 +46,7 @@ async def get_project(current_user: GetUser, db: Datatbase):
     return projects.all()
 
 
-async def get_project_id(current_user: GetUser, db: Datatbase, project_id: int):
+async def get_project_id(current_user: GetUser, db: Database, project_id: int):
     result = await db.scalars(
         select(Project)
         .join(ProjectMembers, Project.id == ProjectMembers.project_id)
@@ -63,7 +65,7 @@ async def get_project_id(current_user: GetUser, db: Datatbase, project_id: int):
 async def update_project(
     project_model: ProjectUpdateModel,
     current_user: GetUser,
-    db: Datatbase,
+    db: Database,
     project_id: int,
 ):
     result = await db.scalars(
@@ -78,7 +80,10 @@ async def update_project(
     )
     project = result.first()
     if project is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="project not found!")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="project not found or you are not Owner/Manager",
+        )
     if project_model.name:
         project.name = project_model.name
     if project_model.description:
@@ -88,7 +93,7 @@ async def update_project(
     return {"message": "Project updated successfully!"}
 
 
-async def delete_project(current_user: GetUser, db: Datatbase, project_id: int):
+async def delete_project(current_user: GetUser, db: Database, project_id: int):
     result = await db.scalars(
         select(Project)
         .join(ProjectMembers, Project.id == ProjectMembers.project_id)
@@ -101,7 +106,10 @@ async def delete_project(current_user: GetUser, db: Datatbase, project_id: int):
     )
     project = result.first()
     if project is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Project not found!")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Project not found! or you are not Owner",
+        )
     project.is_active = False
     project.status = ProjectStatus.ARCHIVED
     await db.commit()
@@ -113,7 +121,7 @@ async def delete_project(current_user: GetUser, db: Datatbase, project_id: int):
 async def update_project_status(
     status_model: ProjectStatusUpdateModel,
     current_user: GetUser,
-    db: Datatbase,
+    db: Database,
     project_id: int,
 ):
     result = await db.scalars(
@@ -137,8 +145,13 @@ async def update_project_status(
 
 ##########Member Project Routers##########
 async def project_member(
-    member_model: ProjectMember, db: Datatbase, current_user: GetUser, project_id: int
+    member_model: ProjectMember, db: Database, current_user: GetUser, project_id: int
 ):
+    if member_model.role == ProjectRole.OWNER:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="one project cant have two owner",
+        )
     result = await db.scalars(
         select(ProjectMembers).where(
             ProjectMembers.project_id == project_id,
@@ -153,6 +166,7 @@ async def project_member(
             status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to add members to this project.",
         )
+
     project_member = ProjectMembers(
         project_id=project_id, user_id=member_model.user_id, role=member_model.role
     )
@@ -163,10 +177,11 @@ async def project_member(
 
 
 async def project_update_member(
-    member_model: ProjectMember,
-    db: Datatbase,
+    member_model: ProjectUpdateMember,
+    db: Database,
     current_user: GetUser,
     project_id: int,
+    user_id: int,
 ):
     result = await db.scalars(
         select(ProjectMembers).where(
@@ -185,7 +200,7 @@ async def project_update_member(
     result_member = await db.scalars(
         select(ProjectMembers).where(
             ProjectMembers.project_id == project_id,
-            ProjectMembers.user_id == member_model.user_id,
+            ProjectMembers.user_id == user_id,
         )
     )
     member = result_member.first()
@@ -198,7 +213,7 @@ async def project_update_member(
 
 
 async def project_delete_member(
-    db: Datatbase,
+    db: Database,
     current_user: GetUser,
     project_id: int,
     user_id: int,
@@ -215,7 +230,7 @@ async def project_delete_member(
     if role_member.role != ProjectRole.OWNER:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            detail="You are not authorized to add members to this project.",
+            detail="You are not authorized to remove members to this project.",
         )
 
     result_member = await db.scalars(
@@ -239,23 +254,23 @@ async def project_delete_member(
 
 async def get_project_members(
     current_user: GetUser,
-    db: Datatbase,
+    db: Database,
     project_id: int,
 ):
-    member = await db.scalar(
+    result_member = await db.scalars(
         select(ProjectMembers).where(
             ProjectMembers.project_id == project_id,
             ProjectMembers.user_id == current_user.id,
         )
     )
-
+    member = result_member.first()
     if member is None:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail="You are not a member of this project.",
         )
 
-    projects = await db.execute(
+    result = await db.execute(
         select(User.username, ProjectMembers.role)
         .join(User, ProjectMembers.user_id == User.id)
         .join(Project, ProjectMembers.project_id == Project.id)
@@ -265,4 +280,10 @@ async def get_project_members(
         )
     )
 
-    return projects.all()
+    return [
+        {
+            "username": username,
+            "role": role,
+        }
+        for username, role in result.all()
+    ]

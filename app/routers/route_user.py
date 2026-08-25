@@ -1,14 +1,15 @@
-from database.dependancy import Datatbase, GetUser
 from fastapi import APIRouter
-from schemas.schema_user import UpdeateUserModel, UserModel, UserPasswordModel
-from services import service_user
 from starlette import status
+
+from app.database.dependency import Database, GetUser
+from app.schemas.schema_user import UpdateUserModel, UserModel, UserPasswordModel
+from app.services import service_user
 
 route = APIRouter()
 
 
 @route.post("/", status_code=status.HTTP_201_CREATED)
-async def create_user(user_model: UserModel, db: Datatbase):
+async def create_user(user_model: UserModel, db: Database):
 
     return await service_user.create_user(user_model=user_model, db=db)
 
@@ -19,18 +20,18 @@ async def get_personal(current_user: GetUser):
 
 
 @route.put("/", status_code=status.HTTP_200_OK)
-async def updeate_personal(
-    current_user: GetUser, user_model: UpdeateUserModel, db: Datatbase
+async def update_personal(
+    current_user: GetUser, user_model: UpdateUserModel, db: Database
 ):
-    return await service_user.updeate_user(
+    return await service_user.update_user(
         user_model=user_model, db=db, current_user=current_user
     )
 
 
 @route.put("/password", status_code=status.HTTP_200_OK)
-async def updeate_password(
-    current_user: GetUser, pass_model: UserPasswordModel, db: Datatbase
+async def update_password(
+    current_user: GetUser, pass_model: UserPasswordModel, db: Database
 ):
-    return await service_user.updeate_password(
+    return await service_user.update_password(
         password_model=pass_model, db=db, current_user=current_user
     )
