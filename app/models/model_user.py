@@ -25,13 +25,13 @@ class User(Base):
         default=UserRole.USER,
     )
     is_active: Mapped[bool] = mapped_column(BOOLEAN, default=True)
-    project_members: Mapped[list["ProjectMembers"]] = relationship(
+    project_members: Mapped[list["ProjectMembers"]] = relationship(  # type: ignore  # noqa: F821
         back_populates="user"
     )
-    created_tasks: Mapped[list["Task"]] = relationship(
+    created_tasks: Mapped[list["Task"]] = relationship(  # type: ignore  # noqa: F821
         foreign_keys="Task.creator_id", back_populates="creator"
     )
 
-    assigned_tasks: Mapped[list["Task"]] = relationship(
+    assigned_tasks: Mapped[list["Task"]] = relationship(  # type: ignore  # noqa: F821
         secondary="task_assignee", back_populates="assignees"
     )

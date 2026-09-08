@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import jwt
@@ -9,6 +10,7 @@ from starlette import status
 
 from app.core.security import ALGORITHM, SECRET_KEY, oauth2_scheme
 from app.database.database import LocalSession
+from app.models.model_task import TimeUnit
 from app.models.model_user import User, UserRole
 
 
@@ -66,3 +68,22 @@ async def check_admin(current_user: GetUser):
 
 
 GetAdmin = Annotated[User, Depends(check_admin)]
+
+
+def calculate_due_time(value: int, unit: TimeUnit):
+    time_now = datetime.now(tz=timezone.utc)
+    if unit == TimeUnit.MINUTES:
+        due_time = timedelta(minutes=value)
+    elif unit == TimeUnit.HOURS:
+        due_time = timedelta(hours=value)
+    elif unit == TimeUnit.DAYS:
+        due_time = timedelta(days=value)
+    elif unit == TimeUnit.WEEKS:
+        due_time = timedelta(weeks=value)
+    elif unit == TimeUnit.MONTHS:
+        months = 4 * value
+        due_time = timedelta(weeks=months)
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    time = time_now + due_time
+    return time

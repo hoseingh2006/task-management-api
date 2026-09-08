@@ -1,13 +1,15 @@
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 from starlette import status
 
-from app.database.dependency import Database, GetUser
+from app.database.dependency import Database, GetUser, calculate_due_time
 from app.models.model_project import Project, ProjectMembers, ProjectRole
-from app.models.model_task import Task, TaskAssignee
+from app.models.model_task import Tag, TagScope, Task, TaskAssignee, TaskLabel
 from app.models.model_user import User
 from app.schemas.schema_task import (
+    TagProjectModel,
+    TagTaskModel,
     TaskModel,
     TaskStatus,
     TaskStatusUpdateModel,
@@ -65,7 +67,6 @@ async def create_task(
 
     # 3. Validate assignees
     assignee_ids = set(task_model.assignee_ids)
-
     if assignee_ids:
         result = await db.scalars(
             select(ProjectMembers).where(
@@ -88,21 +89,60 @@ async def create_task(
     else:
         users = []
 
-    # 4. Create Task
+    if (task_model.due_value is None) != (task_model.due_unit is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="due_value and due_unit must be provided together",
+        )
+    due_time = None
+
+    if task_model.due_value is not None and task_model.due_unit is not None:
+        due_time = calculate_due_time(
+            value=task_model.due_value, unit=task_model.due_unit
+        )
+
     task = Task(
         title=task_model.title,
         description=task_model.description,
         project_id=project_id,
+        due_date=due_time,
+        priority=task_model.priority,
         creator_id=current_user.id,
     )
 
     task.assignees = users
 
     db.add(task)
+    await db.flush()
 
+    tag_ids = set(task_model.tags_id)
+
+    if tag_ids:
+        result = await db.scalars(select(Tag).where(Tag.id.in_(tag_ids)))
+
+        tags = result.all()
+
+        if len(tags) != len(tag_ids):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="One or more tags not found",
+            )
+
+        for tag in tags:
+            if tag.scope == TagScope.PROJECT and tag.project_id != project_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="One or more tags do not belong to this project",
+                )
+
+            db.add(
+                TaskLabel(
+                    task_id=task.id,
+                    tag_id=tag.id,
+                )
+            )
     await db.commit()
     await db.refresh(task)
-
     return {
         "message": "Task created successfully!",
         "task_id": task.id,
@@ -249,6 +289,13 @@ async def update_task(
         task.title = task_model.title
     if task_model.description is not None:
         task.description = task_model.description
+    if task_model.priority is not None:
+        task.priority = task_model.priority
+    if task_model.due_value != None and task_model.due_unit != None:
+        due_time = calculate_due_time(
+            value=task_model.due_value, unit=task_model.due_unit
+        )
+        task.due_date = due_time
     if task_model.assignee_ids is not None:
         assignee_ids = set(task_model.assignee_ids)
         if assignee_ids:
@@ -372,3 +419,303 @@ async def update_task_status(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="for archive use delete endpoint"
         )
+
+
+##########tag project\task##########
+async def create_tag(
+    tag_model: TagProjectModel, db: Database, current_user: GetUser, project_id: int
+):
+    result_project = await db.scalars(
+        select(Project).where(
+            Project.id == project_id,
+            Project.is_active.is_(True),
+        )
+    )
+    project = result_project.first()
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+    result_project_member = await db.scalars(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+    project_member = result_project_member.first()
+    if project_member is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="not find project"
+        )
+    if project_member.role not in (ProjectRole.OWNER, ProjectRole.MANAGER):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You dont have access to create Tag ",
+        )
+    result_tag = await db.scalars(
+        select(Tag).where(
+            Tag.project_id == project_id,
+            Tag.name == tag_model.name,
+        )
+    )
+    tag = result_tag.first()
+    if tag is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="already exists tag in project"
+        )
+    new_tag = Tag(project_id=project_id, name=tag_model.name)
+    db.add(new_tag)
+    await db.commit()
+    await db.refresh(new_tag)
+    return {"message": "successfully create Tag"}
+
+
+async def update_tag(
+    tag_model: TagProjectModel,
+    db: Database,
+    tag_id: int,
+    current_user: GetUser,
+    project_id: int,
+):
+    project_member_result = await db.scalars(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+    project_member = project_member_result.first()
+    if project_member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+    if project_member.role not in (ProjectRole.OWNER, ProjectRole.MANAGER):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to change",
+        )
+    tag_result = await db.scalars(
+        select(Tag)
+        .join(Project, Project.id == Tag.project_id)
+        .where(
+            Tag.id == tag_id,
+            Tag.project_id == project_id,
+            Project.is_active.is_(True),
+        )
+    )
+    tag = tag_result.first()
+    if tag is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tag not found in this project",
+        )
+
+    tag.name = tag_model.name
+    await db.commit()
+    return {"message": "update tag successfully"}
+
+
+async def delete_tag(
+    db: Database,
+    tag_id: int,
+    current_user: GetUser,
+    project_id: int,
+):
+    project_member_result = await db.scalars(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+    project_member = project_member_result.first()
+    if project_member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+    if project_member.role not in (ProjectRole.OWNER, ProjectRole.MANAGER):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to change",
+        )
+    tag_result = await db.scalars(
+        select(Tag)
+        .join(Project, Project.id == Tag.project_id)
+        .where(
+            Tag.id == tag_id,
+            Tag.project_id == project_id,
+            Project.is_active.is_(True),
+        )
+    )
+    tag = tag_result.first()
+    if tag is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tag not found in this project",
+        )
+
+    await db.delete(tag)
+    await db.commit()
+    return {"message": "delete tag successfully"}
+
+
+async def select_all_project_tag(
+    db: Database,
+    current_user: GetUser,
+    project_id: int,
+):
+    project_member_result = await db.scalars(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+    project_member = project_member_result.first()
+    if project_member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+    tag_result = await db.scalars(
+        select(Tag).where(
+            or_(
+                Tag.project_id == project_id,
+                Tag.scope == TagScope.GLOBAL,
+            )
+        )
+    )
+    tag = tag_result.all()
+    if not tag:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tag not found in this project",
+        )
+
+    return tag
+
+
+async def select_all_tag_with_project_task(
+    db: Database,
+    task_id: int,
+    current_user: GetUser,
+    project_id: int,
+):
+    project_member_result = await db.scalars(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+    project_member = project_member_result.first()
+    if project_member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+    task_result = await db.scalars(
+        select(Task).where(
+            Task.id == task_id, Task.project_id == project_id, Task.is_active.is_(True)
+        )
+    )
+    task = task_result.first()
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found in this project",
+        )
+
+    return task.tags
+
+
+##########tag project\task##########
+async def add_tags_to_task(
+    tag_model: TagTaskModel,
+    db: Database,
+    current_user: GetUser,
+    project_id: int,
+    task_id: int,
+):
+    result_project = await db.scalars(
+        select(Project).where(
+            Project.id == project_id,
+            Project.is_active.is_(True),
+        )
+    )
+    project = result_project.first()
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found in this project",
+        )
+
+    result_task = await db.scalars(
+        select(Task).where(
+            Task.id == task_id, Task.project_id == project_id, Task.is_active.is_(True)
+        )
+    )
+    task = result_task.first()
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="task not exists in project",
+        )
+
+    result_project_member = await db.scalars(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+    project_member = result_project_member.first()
+    if project_member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+    if project_member.role not in (ProjectRole.OWNER, ProjectRole.MANAGER):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You dont have access to create Tag ",
+        )
+
+    tag_ids = set(tag_model.tags_id)
+    if not tag_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No tags provided",
+        )
+    result = await db.scalars(select(Tag).where(Tag.id.in_(tag_ids)))
+    tags = result.all()
+    if len(tags) != len(tag_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="One or more tags not found",
+        )
+    for tag in tags:
+        if tag.scope == TagScope.PROJECT and tag.project_id != project_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="One or more tags do not belong to this project",
+            )
+    existing_tags = await db.scalars(
+        select(TaskLabel.tag_id).where(
+            TaskLabel.task_id == task.id,
+            TaskLabel.tag_id.in_(tag_ids),
+        )
+    )
+
+    existing_tag_ids = set(existing_tags.all())
+    for tag in tags:
+        if tag.id in existing_tag_ids:
+            continue
+
+        db.add(
+            TaskLabel(
+                task_id=task.id,
+                tag_id=tag.id,
+            )
+        )
+    await db.commit()
+
+    return {"message": "successfully create Tag"}

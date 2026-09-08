@@ -47,7 +47,8 @@ class Project(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     members: Mapped[list["ProjectMembers"]] = relationship(back_populates="project")
-    tasks: Mapped[list["Task"]] = relationship(back_populates="project")
+    tasks: Mapped[list["Task"]] = relationship(back_populates="project")  # type: ignore  # noqa: F821
+    tags: Mapped[list["Tag"]] = relationship(back_populates="project")  # type: ignore  # noqa: F821
 
 
 class ProjectMembers(Base):
@@ -60,5 +61,5 @@ class ProjectMembers(Base):
         default=ProjectRole.MEMBER,
     )
     project: Mapped["Project"] = relationship(back_populates="members")
-    user: Mapped["User"] = relationship(back_populates="project_members")
+    user: Mapped["User"] = relationship(back_populates="project_members")  # type: ignore  # noqa: F821
     __table_args__ = (UniqueConstraint("project_id", "user_id"),)
