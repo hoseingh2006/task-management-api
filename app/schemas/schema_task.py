@@ -9,7 +9,7 @@ class TaskModel(BaseModel):
     priority: TaskPriority | None = None
     due_unit: TimeUnit | None = None
     due_value: int | None = None
-    tags_id: list[int]
+    tags_id: list[int] = Field(default_factory=list)
     assignee_ids: list[int] = Field(default_factory=list)
 
 

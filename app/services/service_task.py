@@ -719,3 +719,374 @@ async def add_tags_to_task(
     await db.commit()
 
     return {"message": "successfully create Tag"}
+
+
+##########subtask##########
+async def create_subtask(
+    task_model: TaskModel,
+    db: Database,
+    current_user: GetUser,
+    project_id: int,
+    task_id: int,
+):
+    # 1. Project
+    result = await db.scalars(
+        select(Project).where(
+            Project.id == project_id,
+            Project.is_active.is_(True),
+        )
+    )
+
+    project = result.first()
+
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    # 2. Permission
+    result = await db.scalars(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+
+    member = result.first()
+
+    if member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+
+    if member.role not in (
+        ProjectRole.OWNER,
+        ProjectRole.MANAGER,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to create task",
+        )
+    result = await db.scalars(
+        select(Task).where(
+            Task.project_id == project_id, Task.is_active.is_(True), Task.id == task_id
+        )
+    )
+    task = result.first()
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found in this project",
+        )
+    # 3. Validate assignees
+    assignee_ids = set(task_model.assignee_ids)
+    if assignee_ids:
+        result = await db.scalars(
+            select(ProjectMembers).where(
+                ProjectMembers.project_id == project_id,
+                ProjectMembers.user_id.in_(assignee_ids),
+            )
+        )
+
+        members = result.all()
+
+        if len(members) != len(assignee_ids):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="One or more assignees are not members of this project",
+            )
+
+        users = await db.scalars(select(User).where(User.id.in_(assignee_ids)))
+
+        users = users.all()
+    else:
+        users = []
+
+    if (task_model.due_value is None) != (task_model.due_unit is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="due_value and due_unit must be provided together",
+        )
+    due_time = None
+
+    if task_model.due_value is not None and task_model.due_unit is not None:
+        due_time = calculate_due_time(
+            value=task_model.due_value, unit=task_model.due_unit
+        )
+
+    subtask = Task(
+        title=task_model.title,
+        description=task_model.description,
+        project_id=project_id,
+        due_date=due_time,
+        parent_task_id=task.id,
+        priority=task_model.priority,
+        creator_id=current_user.id,
+    )
+
+    subtask.assignees = users
+
+    db.add(subtask)
+    await db.flush()
+
+    tag_ids = set(task_model.tags_id)
+
+    if tag_ids:
+        result = await db.scalars(select(Tag).where(Tag.id.in_(tag_ids)))
+
+        tags = result.all()
+
+        if len(tags) != len(tag_ids):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="One or more tags not found",
+            )
+
+        for tag in tags:
+            if tag.scope == TagScope.PROJECT and tag.project_id != project_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="One or more tags do not belong to this project",
+                )
+
+            db.add(
+                TaskLabel(
+                    task_id=subtask.id,
+                    tag_id=tag.id,
+                )
+            )
+    await db.commit()
+    await db.refresh(subtask)
+    return {
+        "message": "Subtask created successfully",
+        "task_id": subtask.id,
+    }
+
+
+async def get_subtask_with_task(
+    current_user: GetUser, db: Database, project_id: int, task_id: int
+):
+    project_result = await db.execute(
+        select(Project.id, ProjectMembers.role)
+        .join(ProjectMembers, Project.id == ProjectMembers.project_id)
+        .where(
+            ProjectMembers.user_id == current_user.id,
+            Project.is_active.is_(True),
+            Project.id == project_id,
+        )
+    )
+    project = project_result.first()
+    if project is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Project not found")
+    result = await db.scalars(
+        select(Task).where(
+            Task.project_id == project_id,
+            Task.is_active.is_(True),
+            Task.parent_task_id == task_id,
+        )
+    )
+    tasks = result.all()
+    return tasks
+
+
+async def update_subtask(
+    task_model: TaskUpdateModel,
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    task_id: int,
+    subtask_id: int,
+):
+    # 1. Project
+    result = await db.scalars(
+        select(Project).where(
+            Project.id == project_id,
+            Project.is_active.is_(True),
+        )
+    )
+
+    project = result.first()
+
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    # 2. Permission
+    result = await db.scalars(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+
+    member = result.first()
+
+    if member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+
+    if member.role not in (
+        ProjectRole.OWNER,
+        ProjectRole.MANAGER,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to create task",
+        )
+    result_task = await db.scalars(
+        select(Task).where(
+            Task.project_id == project_id,
+            Task.id == task_id,
+            Task.is_active.is_(True),
+        )
+    )
+    task = result_task.first()
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Parent task not found",
+        )
+    result_subtask = await db.scalars(
+        select(Task).where(
+            Task.project_id == project_id,
+            Task.parent_task_id == task_id,
+            Task.is_active.is_(True),
+            Task.id == subtask_id,
+        )
+    )
+    subtask = result_subtask.first()
+    if subtask is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subtask not found",
+        )
+
+    if task_model.title is not None:
+        subtask.title = task_model.title
+    if task_model.description is not None:
+        subtask.description = task_model.description
+    if task_model.priority is not None:
+        subtask.priority = task_model.priority
+    if (task_model.due_value is None) != (task_model.due_unit is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="due_value and due_unit must be provided together",
+        )
+    if task_model.due_value is not None:
+        subtask.due_date = calculate_due_time(
+            value=task_model.due_value,
+            unit=task_model.due_unit,
+        )
+    if task_model.assignee_ids is not None:
+        assignee_ids = set(task_model.assignee_ids)
+        if assignee_ids:
+            result = await db.scalars(
+                select(ProjectMembers).where(
+                    ProjectMembers.project_id == project_id,
+                    ProjectMembers.user_id.in_(assignee_ids),
+                )
+            )
+
+            members = result.all()
+
+            if len(members) != len(assignee_ids):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="One or more assignees are not members of this project",
+                )
+
+            users = await db.scalars(select(User).where(User.id.in_(assignee_ids)))
+
+            users = users.all()
+        else:
+            users = []
+
+        subtask.assignees = users
+    await db.commit()
+    await db.refresh(subtask)
+    return {"message": "Subtask updated successfully"}
+
+
+async def delete_subtask(
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    task_id: int,
+    subtask_id: int,
+):
+    # 1. Project
+    result = await db.scalars(
+        select(Project).where(
+            Project.id == project_id,
+            Project.is_active.is_(True),
+        )
+    )
+
+    project = result.first()
+
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    # 2. Permission
+    result = await db.scalars(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+
+    member = result.first()
+
+    if member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+
+    if member.role not in (
+        ProjectRole.OWNER,
+        ProjectRole.MANAGER,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to delete subtask",
+        )
+    result_task = await db.scalars(
+        select(Task).where(
+            Task.project_id == project_id,
+            Task.id == task_id,
+            Task.is_active.is_(True),
+        )
+    )
+    task = result_task.first()
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Parent task not found",
+        )
+    result_subtask = await db.scalars(
+        select(Task).where(
+            Task.project_id == project_id,
+            Task.parent_task_id == task_id,
+            Task.is_active.is_(True),
+            Task.id == subtask_id,
+        )
+    )
+    subtask = result_subtask.first()
+    if subtask is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subtask not found",
+        )
+    subtask.is_active = False
+    await db.commit()
+    return {"message": "Subtask deleted successfully"}

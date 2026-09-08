@@ -71,6 +71,22 @@ class Task(Base):
     creator: Mapped["User"] = relationship(  # type: ignore  # noqa: F821
         foreign_keys=[creator_id], back_populates="created_tasks"
     )
+    parent_task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("task.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+
+    parent_task: Mapped["Task | None"] = relationship(
+        "Task",
+        remote_side="Task.id",
+        back_populates="subtasks",
+    )
+
+    subtasks: Mapped[list["Task"]] = relationship(
+        "Task",
+        back_populates="parent_task",
+        cascade="all, delete-orphan",
+    )
 
 
 class TaskAssignee(Base):
