@@ -14,3 +14,7 @@ class UserUpdateAdminModel(BaseModel):
 
 class UserUpdateAdminPasswordModel(BaseModel):
     password: str
+
+
+class TagModel(BaseModel):
+    name: str

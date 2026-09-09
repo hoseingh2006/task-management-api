@@ -6,9 +6,10 @@ from starlette import status
 from app.core.security import Password_hash
 from app.database.dependency import Database
 from app.models.model_project import Project, ProjectMembers
-from app.models.model_task import Task
+from app.models.model_task import Tag, TagScope, Task
 from app.models.model_user import User
 from app.schemas.schema_admin import (
+    TagModel,
     UserRole,
     UserUpdateAdminModel,
     UserUpdateAdminPasswordModel,
@@ -168,26 +169,32 @@ async def delete_task(
     return {"massage": "successfully deleted!"}
 
 
+######dashboard############
 async def dashboard(db: Database):
     task_active = await db.scalar(
-        select(func.count(Task.id)).where(Task.is_active == True)
+        select(func.count(Task.id)).where(Task.is_active.is_(True))
     )
     task_deactivate = await db.scalar(
-        select(func.count(Task.id)).where(Task.is_active == True)
+        select(func.count(Task.id)).where(Task.is_active.is_(False))
     )
     project_active = await db.scalar(
-        select(func.count(Project.id)).where(Project.is_active == True)
+        select(func.count(Project.id)).where(Project.is_active.is_(True))
     )
     project_deactivate = await db.scalar(
-        select(func.count(Project.id)).where(Project.is_active == False)
+        select(func.count(Project.id)).where(Project.is_active.is_(False))
     )
     user_active = await db.scalar(
-        select(func.count(User.id)).where(User.is_active == True)
+        select(func.count(User.id)).where(User.is_active.is_(True))
     )
     user_deactivate = await db.scalar(
-        select(func.count(User.id)).where(User.is_active == False)
+        select(func.count(User.id)).where(User.is_active.is_(False))
     )
-    admins = await db.scalar(select(func.count(User.role == UserRole.ADMIN)))
+    admins = await db.scalar(
+        select(func.count(User.id)).where(
+            User.role == UserRole.ADMIN,
+            User.is_active.is_(True),
+        )
+    )
     return {
         "task_active": task_active,
         "task_deactivate": task_deactivate,
@@ -197,3 +204,105 @@ async def dashboard(db: Database):
         "user_deactivate": user_deactivate,
         "admins": admins,
     }
+
+
+######Tag############
+async def create_tag(tag_model: TagModel, db: Database):
+    result_tag = await db.scalars(
+        select(Tag.id).where(Tag.name == tag_model.name, Tag.scope == TagScope.GLOBAL)
+    )
+    tag = result_tag.first()
+    if tag is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="this tag already exists"
+        )
+    new_tag = Tag(name=tag_model.name, scope=TagScope.GLOBAL)
+    db.add(new_tag)
+    await db.commit()
+    return {"message": "successfully create GLOBAL Tag"}
+
+
+async def get_all_tag(db: Database):
+    result_tag = await db.scalars(select(Tag))
+    tag = result_tag.all()
+    return tag
+
+
+async def get_all_project_tag(db: Database):
+    result_tag = await db.scalars(select(Tag).where(Tag.scope == TagScope.PROJECT))
+    tag = result_tag.all()
+    return tag
+
+
+async def get_all_global_tag(db: Database):
+    result_tag = await db.scalars(select(Tag).where(Tag.scope == TagScope.GLOBAL))
+    tag = result_tag.all()
+    return tag
+
+
+async def get_all_tag_with_project(db: Database, project_id: int):
+    result_tag = await db.scalars(select(Tag).where(Tag.project_id == project_id))
+    tag = result_tag.all()
+    return tag
+
+
+async def delete_tag_with_id(db: Database, tag_id: int):
+    result_tag = await db.scalars(
+        select(Tag).where(Tag.id == tag_id, Tag.scope == TagScope.GLOBAL)
+    )
+    tag = result_tag.first()
+    if tag is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found"
+        )
+    await db.delete(tag)
+    await db.commit()
+    return {"message": "Tag deleted successfully!"}
+
+
+async def update_tag_with_id(db: Database, tag_model: TagModel, tag_id: int):
+    result_tag = await db.scalars(
+        select(Tag.id).where(
+            Tag.name == tag_model.name, Tag.scope == TagScope.GLOBAL, Tag.id != tag_id
+        )
+    )
+    tag = result_tag.first()
+    if tag is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="this tag already exists"
+        )
+    result_tag = await db.scalars(
+        select(Tag).where(Tag.scope == TagScope.GLOBAL, Tag.id == tag_id)
+    )
+    tag = result_tag.first()
+    if tag is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Not find this tag"
+        )
+    if tag_model.name is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Not passed requirement fields",
+        )
+    tag.name = tag_model.name
+    await db.commit()
+    return {"message": "update tag is successfully!"}
+
+
+######subtask############
+async def get_subtasks(db: Database):
+    result = await db.scalars(select(Task).where(Task.parent_task_id.is_not(None)))
+    tasks = result.all()
+    return tasks
+
+
+async def get_subtask_id(task_id: int, db: Database):
+    result = await db.scalars(
+        select(Task).where(Task.id == task_id, Task.parent_task_id.is_not(None))
+    )
+    task = result.first()
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
+        )
+    return task
