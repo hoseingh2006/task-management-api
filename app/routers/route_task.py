@@ -5,6 +5,7 @@ from app.database.dependency import Database, GetUser
 from app.schemas.schema_task import (
     TagProjectModel,
     TagTaskModel,
+    TaskDependencyDelete,
     TaskModel,
     TaskStatusUpdateModel,
     TaskUpdateModel,
@@ -232,4 +233,37 @@ async def delete_subtask(
         project_id=project_id,
         task_id=task_id,
         subtask_id=subtask_id,
+    )
+
+
+##########task dependency##########
+@route.get("/depends/{task_id}", status_code=status.HTTP_200_OK)
+async def get_task_dependency_by_id(
+    current_user: GetUser,
+    project_id: int,
+    db: Database,
+    task_id: int,
+):
+    return await service_task.get_task_dependency(
+        current_user=current_user,
+        project_id=project_id,
+        db=db,
+        task_id=task_id,
+    )
+
+
+@route.delete("/depends/{task_id}", status_code=status.HTTP_200_OK)
+async def delete_task_dependency(
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    task_id: int,
+    model_dependency: TaskDependencyDelete,
+):
+    return await service_task.delete_task_dependency(
+        current_user=current_user,
+        db=db,
+        project_id=project_id,
+        task_id=task_id,
+        model_dependency=model_dependency,
     )

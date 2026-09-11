@@ -11,6 +11,7 @@ class TaskModel(BaseModel):
     due_value: int | None = None
     tags_id: list[int] = Field(default_factory=list)
     assignee_ids: list[int] = Field(default_factory=list)
+    dependency_ids: list[int] = Field(default_factory=list)
 
 
 class TagProjectModel(BaseModel):
@@ -21,6 +22,10 @@ class TagTaskModel(BaseModel):
     tags_id: list[int]
 
 
+class TaskDependencyDelete(BaseModel):
+    dependency_ids: list[int]
+
+
 class TaskUpdateModel(BaseModel):
     title: str | None = None
     description: str | None = None
@@ -28,6 +33,7 @@ class TaskUpdateModel(BaseModel):
     due_unit: TimeUnit | None = None
     due_value: int | None = None
     assignee_ids: list[int] | None = None
+    dependency_ids: list[int] | None = None
 
 
 class TaskStatusUpdateModel(BaseModel):

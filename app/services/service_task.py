@@ -3,13 +3,26 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 from starlette import status
 
-from app.database.dependency import Database, GetUser, calculate_due_time
+from app.database.dependency import (
+    Database,
+    GetUser,
+    calculate_due_time,
+    has_dependency_cycle,
+)
 from app.models.model_project import Project, ProjectMembers, ProjectRole
-from app.models.model_task import Tag, TagScope, Task, TaskAssignee, TaskLabel
+from app.models.model_task import (
+    Tag,
+    TagScope,
+    Task,
+    TaskAssignee,
+    TaskDependency,
+    TaskLabel,
+)
 from app.models.model_user import User
 from app.schemas.schema_task import (
     TagProjectModel,
     TagTaskModel,
+    TaskDependencyDelete,
     TaskModel,
     TaskStatus,
     TaskStatusUpdateModel,
@@ -141,6 +154,26 @@ async def create_task(
                     tag_id=tag.id,
                 )
             )
+    dependency_ids = set(task_model.dependency_ids)
+    if dependency_ids:
+        result = await db.scalars(
+            select(Task).where(
+                Task.id.in_(dependency_ids),
+                Task.is_active.is_(True),
+                Task.project_id == project_id,
+            )
+        )
+        dependency_tasks = result.all()
+        if len(dependency_tasks) != len(dependency_ids):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="One or more Task are not  of this project",
+            )
+        for dependency_task in dependency_tasks:
+            db.add(
+                TaskDependency(task_id=task.id, depends_on_task_id=dependency_task.id)
+            )
+
     await db.commit()
     await db.refresh(task)
     return {
@@ -291,7 +324,7 @@ async def update_task(
         task.description = task_model.description
     if task_model.priority is not None:
         task.priority = task_model.priority
-    if task_model.due_value != None and task_model.due_unit != None:
+    if task_model.due_value is not None and task_model.due_unit is not None:
         due_time = calculate_due_time(
             value=task_model.due_value, unit=task_model.due_unit
         )
@@ -321,9 +354,65 @@ async def update_task(
             users = []
 
         task.assignees = users
-    await db.commit()
-    await db.refresh(task)
-    return {"massage": "successfully updated "}
+
+    if task_model.dependency_ids is not None:
+        dependency_ids = set(task_model.dependency_ids)
+
+        result = await db.scalars(
+            select(Task).where(
+                Task.id.in_(dependency_ids),
+                Task.is_active.is_(True),
+                Task.project_id == project_id,
+            )
+        )
+
+        dependency_tasks = result.all()
+
+        if len(dependency_tasks) != len(dependency_ids):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="One or more dependency tasks are invalid",
+            )
+
+        # خود Task نمی‌تواند dependency خودش باشد
+        if task.id in dependency_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A task cannot depend on itself",
+            )
+
+        # اول cycle را بررسی کن
+        for dependency_task in dependency_tasks:
+            cycle_check = await has_dependency_cycle(
+                db=db,
+                task_id=task.id,
+                dependency_id=dependency_task.id,
+            )
+
+            if cycle_check:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This dependency would create a cycle",
+                )
+
+        # حالا dependencyهای قبلی را حذف کن
+        result = await db.scalars(
+            select(TaskDependency).where(TaskDependency.task_id == task.id)
+        )
+
+        dependencies = result.all()
+
+        for dependency in dependencies:
+            await db.delete(dependency)
+
+        # dependencyهای جدید را اضافه کن
+        for dependency_task in dependency_tasks:
+            db.add(
+                TaskDependency(
+                    task_id=task.id,
+                    depends_on_task_id=dependency_task.id,
+                )
+            )
 
 
 async def delete_task(
@@ -410,15 +499,30 @@ async def update_task_status(
     task = result.first()
     if task is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not find task")
-    if status_model.status in (TaskStatus.COMPLETED, TaskStatus.ACTIVE):
-        task.status = status_model.status
-        await db.commit()
-        await db.refresh(task)
-        return {"message": "successfully update task status "}
-    else:
+    if status_model.status is (TaskStatus.COMPLETED, TaskStatus.IN_PROGRESS):
+        result = await db.scalars(
+            select(Task.status)
+            .join(TaskDependency, TaskDependency.depends_on_task_id == Task.id)
+            .where(
+                TaskDependency.task_id == task.id,
+                Task.is_active.is_(True),
+            )
+        )
+        dependency_statuses = result.all()
+        if any(status != TaskStatus.COMPLETED for status in dependency_statuses):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="You must complete all dependencies first",
+            )
+
+    if status_model.status is TaskStatus.ARCHIVED:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="for archive use delete endpoint"
         )
+    task.status = status_model.status
+    await db.commit()
+    await db.refresh(task)
+    return {"message": "successfully update task status "}
 
 
 ##########tag project\task##########
@@ -1090,3 +1194,109 @@ async def delete_subtask(
     subtask.is_active = False
     await db.commit()
     return {"message": "Subtask deleted successfully"}
+
+
+##########task dependency##########
+async def get_task_dependency(
+    current_user: GetUser, db: Database, project_id: int, task_id: int
+):
+    project_result = await db.execute(
+        select(Project.id, ProjectMembers.role)
+        .join(ProjectMembers, Project.id == ProjectMembers.project_id)
+        .where(
+            ProjectMembers.user_id == current_user.id,
+            Project.is_active.is_(True),
+            Project.id == project_id,
+        )
+    )
+    project = project_result.first()
+    if project is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Project not found")
+    task = await db.scalar(
+        select(Task).where(
+            Task.id == task_id,
+            Task.project_id == project_id,
+            Task.is_active.is_(True),
+        )
+    )
+
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    if project.role not in (ProjectRole.OWNER, ProjectRole.MANAGER):
+        is_assignee = await db.scalar(
+            select(TaskAssignee.task_id).where(
+                TaskAssignee.task_id == task_id,
+                TaskAssignee.user_id == current_user.id,
+            )
+        )
+
+        if is_assignee is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to view this task",
+            )
+
+    result = await db.scalars(
+        select(Task)
+        .join(TaskDependency, TaskDependency.depends_on_task_id == Task.id)
+        .where(
+            TaskDependency.task_id == task_id,
+            Task.is_active.is_(True),
+        )
+    )
+
+    return result.all()
+
+
+async def delete_task_dependency(
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    model_dependency: TaskDependencyDelete,
+    task_id: int,
+):
+    project_result = await db.execute(
+        select(Project.id, ProjectMembers.role)
+        .join(ProjectMembers, Project.id == ProjectMembers.project_id)
+        .where(
+            ProjectMembers.user_id == current_user.id,
+            Project.is_active.is_(True),
+            Project.id == project_id,
+        )
+    )
+    project = project_result.first()
+    if project is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Project not found")
+    task = await db.scalar(
+        select(Task).where(
+            Task.id == task_id,
+            Task.project_id == project_id,
+            Task.is_active.is_(True),
+        )
+    )
+
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    if project.role not in (ProjectRole.OWNER, ProjectRole.MANAGER):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to delete depends task",
+        )
+    task_dependency = set(model_dependency.dependency_ids)
+    result = await db.scalars(
+        select(TaskDependency).where(
+            TaskDependency.depends_on_task_id.in_(task_dependency),
+            TaskDependency.task_id == task_id,
+        )
+    )
+    dependencies = result.all()
+    for dependency in dependencies:
+        await db.delete(dependency)
+    await db.commit()
+    return {"message": "delete depends tasks successfully"}

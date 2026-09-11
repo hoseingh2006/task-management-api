@@ -10,7 +10,7 @@ from starlette import status
 
 from app.core.security import ALGORITHM, SECRET_KEY, oauth2_scheme
 from app.database.database import LocalSession
-from app.models.model_task import TimeUnit
+from app.models.model_task import TaskDependency, TimeUnit
 from app.models.model_user import User, UserRole
 
 
@@ -87,3 +87,35 @@ def calculate_due_time(value: int, unit: TimeUnit):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
     time = time_now + due_time
     return time
+
+
+##########task dependency##########
+async def has_dependency_cycle(
+    db: Database,
+    task_id: int,
+    dependency_id: int,
+) -> bool:
+
+    visited: set[int] = set()
+    stack: list[int] = [dependency_id]
+
+    while stack:
+        current_id = stack.pop()
+
+        if current_id == task_id:
+            return True
+
+        if current_id in visited:
+            continue
+
+        visited.add(current_id)
+
+        result = await db.scalars(
+            select(TaskDependency.depends_on_task_id).where(
+                TaskDependency.task_id == current_id
+            )
+        )
+
+        stack.extend(result.all())
+
+    return False

@@ -19,6 +19,8 @@ from app.database.database import Base
 class TaskStatus(str, Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
+    IN_PROGRESS = "in_progress"
+    CANCELLED = "cancelled"
     EXPIRE = "expire"
     ARCHIVED = "archived"
 
@@ -121,3 +123,17 @@ class Tag(Base):
         secondary="task_labels",
     )
     __table_args__ = (UniqueConstraint("project_id", "name"),)
+
+
+class TaskDependency(Base):
+    __tablename__ = "task_dependency"
+
+    task_id: Mapped[int] = mapped_column(
+        ForeignKey("task.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    depends_on_task_id: Mapped[int] = mapped_column(
+        ForeignKey("task.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
