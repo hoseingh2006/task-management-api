@@ -17,6 +17,7 @@ from app.models.model_task import (
     TaskAssignee,
     TaskDependency,
     TaskLabel,
+    TaskComment,
 )
 from app.models.model_user import User
 from app.schemas.schema_task import (
@@ -27,6 +28,7 @@ from app.schemas.schema_task import (
     TaskStatus,
     TaskStatusUpdateModel,
     TaskUpdateModel,
+    TaskCommentModel,
 )
 
 
@@ -1300,3 +1302,183 @@ async def delete_task_dependency(
         await db.delete(dependency)
     await db.commit()
     return {"message": "delete depends tasks successfully"}
+
+
+##########task comment##########
+async def add_task_comment(
+    current_user: GetUser, db: Database, model_comment: TaskCommentModel, task_id: int
+):
+    task = await db.scalar(
+        select(Task).where(Task.id == task_id, Task.is_active.is_(True))
+    )
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    project_member = await db.scalar(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == task.project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+    if project_member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+    if project_member.role not in (ProjectRole.OWNER, ProjectRole.MANAGER):
+        task_assignee = await db.scalar(
+            select(TaskAssignee).where(
+                TaskAssignee.task_id == task_id,
+                TaskAssignee.user_id == current_user.id,
+            )
+        )
+        if task_assignee is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to comment on this task",
+            )
+    task_comment = TaskComment(
+        content=model_comment.content, creator_id=current_user.id, task_id=task_id
+    )
+    db.add(task_comment)
+    await db.commit()
+    return {"message": "add comment successfully!"}
+
+
+async def get_task_comments(current_user: GetUser, db: Database, task_id: int):
+    task = await db.scalar(
+        select(Task).where(Task.id == task_id, Task.is_active.is_(True))
+    )
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    project_member = await db.scalar(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == task.project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+    if project_member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+    if project_member.role not in (ProjectRole.OWNER, ProjectRole.MANAGER):
+        task_assignee = await db.scalar(
+            select(TaskAssignee).where(
+                TaskAssignee.task_id == task_id,
+                TaskAssignee.user_id == current_user.id,
+            )
+        )
+        if task_assignee is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to comment on this task",
+            )
+    comments = await db.scalars(
+        select(TaskComment)
+        .where(
+            TaskComment.task_id == task_id,
+        )
+        .order_by(TaskComment.created_at.desc())
+    )
+    return comments.all()
+
+
+async def delete_task_comment(
+    current_user: GetUser, db: Database, task_id: int, task_comment_id: int
+):
+    task = await db.scalar(
+        select(Task).where(Task.id == task_id, Task.is_active.is_(True))
+    )
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    project_member = await db.scalar(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == task.project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+    if project_member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+    comment = await db.scalar(
+        select(TaskComment).where(
+            TaskComment.task_id == task_id, TaskComment.id == task_comment_id
+        )
+    )
+    if comment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task Comment not found",
+        )
+    if (
+        project_member.role not in (ProjectRole.OWNER, ProjectRole.MANAGER)
+        and comment.creator_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to delete this comment",
+        )
+
+    await db.delete(comment)
+    await db.commit()
+    return {"message": "delete comment successfully"}
+
+
+async def update_task_comment(
+    current_user: GetUser,
+    model_comment: TaskCommentModel,
+    db: Database,
+    task_id: int,
+    task_comment_id: int,
+):
+    task = await db.scalar(
+        select(Task).where(Task.id == task_id, Task.is_active.is_(True))
+    )
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    project_member = await db.scalar(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == task.project_id,
+            ProjectMembers.user_id == current_user.id,
+        )
+    )
+    if project_member is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project",
+        )
+    comment = await db.scalar(
+        select(TaskComment).where(
+            TaskComment.task_id == task_id, TaskComment.id == task_comment_id
+        )
+    )
+    if comment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task Comment not found",
+        )
+    if (
+        project_member.role not in (ProjectRole.OWNER, ProjectRole.MANAGER)
+        and comment.creator_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to update this comment",
+        )
+    comment.content = model_comment.content
+    await db.commit()
+    return {"message": "update comment successfully"}

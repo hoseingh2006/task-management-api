@@ -5,6 +5,7 @@ from app.database.dependency import Database, GetUser
 from app.schemas.schema_task import (
     TagProjectModel,
     TagTaskModel,
+    TaskCommentModel,
     TaskDependencyDelete,
     TaskModel,
     TaskStatusUpdateModel,
@@ -266,4 +267,62 @@ async def delete_task_dependency(
         project_id=project_id,
         task_id=task_id,
         model_dependency=model_dependency,
+    )
+
+
+##########task comment##########
+@route.post("/{task_id}/comments", status_code=status.HTTP_201_CREATED)
+async def add_task_comment(
+    model_comment: TaskCommentModel,
+    db: Database,
+    task_id: int,
+    current_user: GetUser,
+):
+    return await service_task.add_task_comment(
+        model_comment=model_comment,
+        db=db,
+        task_id=task_id,
+        current_user=current_user,
+    )
+
+
+@route.get("/{task_id}/comments", status_code=status.HTTP_200_OK)
+async def get_task_comments(
+    db: Database,
+    task_id: int,
+    current_user: GetUser,
+):
+    return await service_task.get_task_comments(
+        db=db,
+        task_id=task_id,
+        current_user=current_user,
+    )
+
+
+@route.delete("/{task_id}/comments/{task_comment_id}", status_code=status.HTTP_200_OK)
+async def delete_task_comment(
+    db: Database, task_id: int, current_user: GetUser, task_comment_id: int
+):
+    return await service_task.delete_task_comment(
+        db=db,
+        task_id=task_id,
+        current_user=current_user,
+        task_comment_id=task_comment_id,
+    )
+
+
+@route.put("/{task_id}/comments/{task_comment_id}", status_code=status.HTTP_200_OK)
+async def update_task_comment(
+    db: Database,
+    task_id: int,
+    current_user: GetUser,
+    model_comment: TaskCommentModel,
+    task_comment_id: int,
+):
+    return await service_task.update_task_comment(
+        model_comment=model_comment,
+        db=db,
+        task_id=task_id,
+        current_user=current_user,
+        task_comment_id=task_comment_id,
     )

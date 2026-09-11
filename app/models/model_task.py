@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -137,3 +138,17 @@ class TaskDependency(Base):
         ForeignKey("task.id", ondelete="CASCADE"),
         primary_key=True,
     )
+
+
+class TaskComment(Base):
+    id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
+    content: Mapped[str] = mapped_column(TEXT)
+    creator_id: Mapped[int] = mapped_column(INTEGER, ForeignKey("user.id"))
+    task_id: Mapped[int] = mapped_column(INTEGER, ForeignKey("task.id"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    is_active: Mapped[bool] = mapped_column(BOOLEAN, server_default="True")
