@@ -383,7 +383,7 @@ async def get_all_user_log(db: Database):
     return logs
 
 
-async def get_all_Admin_log(db: Database):
+async def get_all_admin_log(db: Database):
     result = await db.scalars(
         select(ActivityLog).where(ActivityLog.role == UserRole.ADMIN)
     )
@@ -391,7 +391,7 @@ async def get_all_Admin_log(db: Database):
     return logs
 
 
-async def get_user_log_by_user_id(db: Database, user_id: int):
+async def get_log_by_user_id(db: Database, user_id: int):
     result = await db.scalars(
         select(ActivityLog).where(
             ActivityLog.role == UserRole.USER, ActivityLog.user_id == user_id
@@ -403,6 +403,14 @@ async def get_user_log_by_user_id(db: Database, user_id: int):
 
 async def get_log_by_task_id(db: Database, task_id: int):
     result = await db.scalars(select(ActivityLog).where(ActivityLog.task_id == task_id))
+    logs = result.all()
+    return logs
+
+
+async def get_log_by_project_id(db: Database, project_id: int):
+    result = await db.scalars(
+        select(ActivityLog).where(ActivityLog.project_id == project_id)
+    )
     logs = result.all()
     return logs
 

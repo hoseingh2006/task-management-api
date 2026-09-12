@@ -184,13 +184,22 @@ async def add_log(
     task_id: int | None = None,
     role: UserRole | None = None,
 ):
-    activity = ActivityLog(
-        action=action,
-        description=description,
-        user_id=current_user.id,
-        project_id=project_id,
-        task_id=task_id,
-        role=role,
-    )
+    if current_user is None:
+        activity = ActivityLog(
+            action=action,
+            description=description,
+            project_id=project_id,
+            task_id=task_id,
+            role=role,
+        )
+    else:
+        activity = ActivityLog(
+            action=action,
+            description=description,
+            user_id=current_user.id,
+            project_id=project_id,
+            task_id=task_id,
+            role=role,
+        )
 
     db.add(activity)

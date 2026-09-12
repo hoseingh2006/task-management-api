@@ -1,8 +1,8 @@
-"""create table
+"""add  table 
 
-Revision ID: e20ccfc084b7
+Revision ID: f36b13da37c2
 Revises: 
-Create Date: 2026-08-24 18:53:57.333664
+Create Date: 2026-09-12 22:25:07.693326
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'e20ccfc084b7'
+revision: str = 'f36b13da37c2'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -49,26 +49,55 @@ def upgrade() -> None:
     op.create_table('project_members',
     sa.Column('id', sa.INTEGER(), nullable=False),
     sa.Column('project_id', sa.INTEGER(), nullable=False),
-    sa.Column('user_id', sa.INTEGER(), nullable=False),
+    sa.Column('user_id', sa.INTEGER(), nullable=True),
     sa.Column('role', sa.Enum('OWNER', 'MANAGER', 'MEMBER', 'VIEWER', name='projectrole'), nullable=False),
     sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('project_id', 'user_id')
     )
+    op.create_table('tag',
+    sa.Column('id', sa.INTEGER(), nullable=False),
+    sa.Column('name', sa.VARCHAR(length=250), nullable=False),
+    sa.Column('scope', sa.Enum('PROJECT', 'GLOBAL', name='tagscope'), nullable=False),
+    sa.Column('project_id', sa.INTEGER(), nullable=True),
+    sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('project_id', 'name')
+    )
+    op.create_index(op.f('ix_tag_name'), 'tag', ['name'], unique=False)
     op.create_table('task',
     sa.Column('id', sa.INTEGER(), nullable=False),
     sa.Column('title', sa.VARCHAR(length=250), nullable=False),
     sa.Column('description', sa.TEXT(), nullable=False),
     sa.Column('is_active', sa.BOOLEAN(), nullable=False),
-    sa.Column('status', sa.Enum('ACTIVE', 'COMPLETED', 'ARCHIVED', name='taskstatus'), nullable=False),
+    sa.Column('status', sa.Enum('ACTIVE', 'COMPLETED', 'IN_PROGRESS', 'CANCELLED', 'EXPIRE', 'ARCHIVED', name='taskstatus'), nullable=False),
+    sa.Column('priority', sa.Enum('LOW', 'MEDIUM', 'HIGH', 'URGENT', name='taskpriority'), nullable=False),
+    sa.Column('due_date', sa.DateTime(), nullable=False),
     sa.Column('project_id', sa.INTEGER(), nullable=False),
     sa.Column('creator_id', sa.INTEGER(), nullable=False),
+    sa.Column('parent_task_id', sa.INTEGER(), nullable=True),
     sa.ForeignKeyConstraint(['creator_id'], ['user.id'], ),
+    sa.ForeignKeyConstraint(['parent_task_id'], ['task.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_task_title'), 'task', ['title'], unique=False)
+    op.create_table('activity_log',
+    sa.Column('id', sa.INTEGER(), nullable=False),
+    sa.Column('role', sa.Enum('USER', 'ADMIN', name='userrole'), nullable=False),
+    sa.Column('action', sa.TEXT(), nullable=False),
+    sa.Column('description', sa.TEXT(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('user_id', sa.INTEGER(), nullable=True),
+    sa.Column('project_id', sa.INTEGER(), nullable=True),
+    sa.Column('task_id', sa.INTEGER(), nullable=True),
+    sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
+    sa.ForeignKeyConstraint(['task_id'], ['task.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_activity_log_action'), 'activity_log', ['action'], unique=False)
     op.create_table('task_assignee',
     sa.Column('task_id', sa.INTEGER(), nullable=False),
     sa.Column('user_id', sa.INTEGER(), nullable=False),
@@ -76,15 +105,48 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('task_id', 'user_id')
     )
+    op.create_table('task_comment',
+    sa.Column('id', sa.INTEGER(), nullable=False),
+    sa.Column('content', sa.TEXT(), nullable=False),
+    sa.Column('creator_id', sa.INTEGER(), nullable=False),
+    sa.Column('task_id', sa.INTEGER(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('is_active', sa.BOOLEAN(), server_default='True', nullable=False),
+    sa.ForeignKeyConstraint(['creator_id'], ['user.id'], ),
+    sa.ForeignKeyConstraint(['task_id'], ['task.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('task_dependency',
+    sa.Column('task_id', sa.INTEGER(), nullable=False),
+    sa.Column('depends_on_task_id', sa.INTEGER(), nullable=False),
+    sa.ForeignKeyConstraint(['depends_on_task_id'], ['task.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['task_id'], ['task.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('task_id', 'depends_on_task_id')
+    )
+    op.create_table('task_labels',
+    sa.Column('tag_id', sa.INTEGER(), nullable=False),
+    sa.Column('task_id', sa.INTEGER(), nullable=False),
+    sa.ForeignKeyConstraint(['tag_id'], ['tag.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['task_id'], ['task.id'], ),
+    sa.PrimaryKeyConstraint('tag_id', 'task_id')
+    )
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table('task_labels')
+    op.drop_table('task_dependency')
+    op.drop_table('task_comment')
     op.drop_table('task_assignee')
+    op.drop_index(op.f('ix_activity_log_action'), table_name='activity_log')
+    op.drop_table('activity_log')
     op.drop_index(op.f('ix_task_title'), table_name='task')
     op.drop_table('task')
+    op.drop_index(op.f('ix_tag_name'), table_name='tag')
+    op.drop_table('tag')
     op.drop_table('project_members')
     op.drop_index(op.f('ix_user_username'), table_name='user')
     op.drop_index(op.f('ix_user_first_name'), table_name='user')

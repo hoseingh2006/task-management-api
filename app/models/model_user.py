@@ -39,6 +39,7 @@ class User(Base):
 
 
 class ActivityLog(Base):
+    __tablename__ = "activity_log"
     id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
     role: Mapped[UserRole] = mapped_column(
         SQLEnum(UserRole),

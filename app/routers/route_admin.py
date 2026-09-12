@@ -144,3 +144,39 @@ async def get_all_subtasks(current_user: GetAdmin, db: Database):
 @route.get("/subtask/{task_id}", status_code=status.HTTP_200_OK)
 async def get_subtask_by_id(current_user: GetAdmin, db: Database, task_id: int):
     return await service_admin.get_subtask_id(db=db, task_id=task_id)
+
+
+######subtask############
+@route.get("/logs", status_code=status.HTTP_200_OK)
+async def get_all_log(current_user: GetAdmin, db: Database):
+    return await service_admin.get_all_log(db=db)
+
+
+@route.get("/logs/user", status_code=status.HTTP_200_OK)
+async def get_all_user_log(current_user: GetAdmin, db: Database):
+    return await service_admin.get_all_user_log(db=db)
+
+
+@route.get("/logs/admin", status_code=status.HTTP_200_OK)
+async def get_all_admin_log(current_user: GetAdmin, db: Database):
+    return await service_admin.get_all_admin_log(db=db)
+
+
+@route.get("/logs/user/{user_id}", status_code=status.HTTP_200_OK)
+async def get_log_by_user_id(current_user: GetAdmin, db: Database, user_id: int):
+    return await service_admin.get_log_by_user_id(db=db, user_id=user_id)
+
+
+@route.get("/logs/user/task/{task_id}", status_code=status.HTTP_200_OK)
+async def get_log_by_task_id(current_user: GetAdmin, db: Database, task_id: int):
+    return await service_admin.get_log_by_task_id(db=db, task_id=task_id)
+
+
+@route.get("/logs/user/action/{action}", status_code=status.HTTP_200_OK)
+async def get_log_by_action(current_user: GetAdmin, db: Database, action: str):
+    return await service_admin.get_log_by_action(db=db, action=action)
+
+
+@route.get("/logs/user/project/{project_id}", status_code=status.HTTP_200_OK)
+async def get_log_by_project_id(current_user: GetAdmin, db: Database, project_id: int):
+    return await service_admin.get_log_by_project_id(db=db, project_id=project_id)

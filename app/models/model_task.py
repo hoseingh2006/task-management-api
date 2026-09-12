@@ -59,7 +59,8 @@ class Task(Base):
         SQLEnum(TaskPriority), default=TaskPriority.LOW
     )
     due_date: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(tz=timezone.utc) + timedelta(weeks=4)
+        DateTime(timezone=True),
+        default=lambda: datetime.now(tz=timezone.utc) + timedelta(weeks=4),
     )
     project_id: Mapped[int] = mapped_column(ForeignKey("project.id"))
     creator_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
@@ -141,6 +142,7 @@ class TaskDependency(Base):
 
 
 class TaskComment(Base):
+    __tablename__ = "task_comment"
     id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
     content: Mapped[str] = mapped_column(TEXT)
     creator_id: Mapped[int] = mapped_column(INTEGER, ForeignKey("user.id"))
