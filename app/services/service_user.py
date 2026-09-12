@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from starlette import status
 
 from app.core.security import Password_hash, verify_pass
-from app.database.dependency import Database, GetUser
+from app.database.dependency import ActivityAction, Database, GetUser, add_log
 from app.models.model_user import User
 from app.schemas.schema_user import UpdateUserModel, UserModel, UserPasswordModel
 
@@ -12,6 +12,11 @@ async def create_user(user_model: UserModel, db: Database):
     data["password_hash"] = Password_hash.hash(data.pop("password"))
     user = User(**data)
     db.add(user)
+    await add_log(
+        action=ActivityAction.USER_CREATED,
+        description=f"User '{user_model.first_name}' was Created",
+        db=db,
+    )
     await db.commit()
     await db.refresh(user)
     return {"massage": "create user successfully!"}
@@ -26,6 +31,12 @@ async def update_user(user_model: UpdateUserModel, db: Database, current_user: G
         current_user.email = user_model.email
     if user_model.username is not None:
         current_user.username = user_model.username
+    await add_log(
+        action=ActivityAction.USER_UPDATED,
+        description=f"User '{current_user.first_name}' was updated profile",
+        db=db,
+        current_user=current_user,
+    )
     await db.commit()
     await db.refresh(current_user)
     return {"massage": "successfully updated!"}
@@ -45,8 +56,15 @@ async def update_password(
 ):
     if verify_pass(current_user.password_hash, password_model.old_password):
         current_user.password_hash = Password_hash.hash(password_model.new_password)
+        await add_log(
+            action=ActivityAction.USER_UPDATED,
+            description=f"User '{current_user.first_name}' was updated Password",
+            db=db,
+            current_user=current_user,
+        )
         await db.commit()
         await db.refresh(current_user)
+
         return {"massage": "successfully password updated!"}
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

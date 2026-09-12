@@ -1,6 +1,7 @@
+from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import BOOLEAN, INTEGER, TEXT, VARCHAR
+from sqlalchemy import BOOLEAN, INTEGER, TEXT, VARCHAR, DateTime, func, ForeignKey
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,3 +36,19 @@ class User(Base):
     assigned_tasks: Mapped[list["Task"]] = relationship(  # type: ignore  # noqa: F821
         secondary="task_assignee", back_populates="assignees"
     )
+
+
+class ActivityLog(Base):
+    id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
+    role: Mapped[UserRole] = mapped_column(
+        SQLEnum(UserRole),
+        default=UserRole.USER,
+    )
+    action: Mapped[str] = mapped_column(TEXT, index=True)
+    description: Mapped[str] = mapped_column(TEXT)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"), nullable=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("task.id"), nullable=True)

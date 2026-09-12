@@ -4,7 +4,7 @@ from sqlalchemy.orm import selectinload
 from starlette import status
 
 from app.core.security import Password_hash
-from app.database.dependency import Database
+from app.database.dependency import ActivityAction, Database, add_log
 from app.models.model_project import Project, ProjectMembers
 from app.models.model_task import Tag, TagScope, Task
 from app.models.model_user import User
@@ -44,6 +44,12 @@ async def delete_user(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
     await db.delete(user)
+    await add_log(
+        action=ActivityAction.USER_DELETED,
+        description=f"User '{user.username}' was  Deleted  ",
+        db=db,
+        role=UserRole.ADMIN,
+    )
     await db.commit()
     return {"massage": "successfully deleted!"}
 
@@ -67,6 +73,12 @@ async def update_user(db: Database, user_id: int, user_model: UserUpdateAdminMod
         user.is_active = user_model.is_active
     if user_model.role is not None:
         user.role = user_model.role
+    await add_log(
+        action=ActivityAction.USER_UPDATED,
+        description=f"User '{user.username}' was  Updated  ",
+        db=db,
+        role=UserRole.ADMIN,
+    )
     await db.commit()
     await db.refresh(user)
     return user
@@ -82,6 +94,12 @@ async def update_password_user(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
     user.password_hash = Password_hash.hash(password_model.password)
+    await add_log(
+        action=ActivityAction.USER_UPDATED,
+        description=f"User '{user.username}' was  Updated Password  ",
+        db=db,
+        role=UserRole.ADMIN,
+    )
     await db.commit()
     await db.refresh(user)
     return {"massage": "successfully change password!"}
@@ -114,6 +132,13 @@ async def delete_project(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="project not found"
         )
+    await add_log(
+        action=ActivityAction.PROJECT_DELETED,
+        description=f"Project '{project.name}' was  Deleted  ",
+        db=db,
+        role=UserRole.ADMIN,
+        project_id=project_id,
+    )
     await db.delete(project)
     await db.commit()
     return {"massage": "successfully deleted!"}
@@ -165,6 +190,13 @@ async def delete_task(
             status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
         )
     await db.delete(task)
+    await add_log(
+        action=ActivityAction.TASK_DELETED,
+        description=f"Task '{task.title}' was  Deleted  ",
+        db=db,
+        role=UserRole.ADMIN,
+        task_id=task_id,
+    )
     await db.commit()
     return {"massage": "successfully deleted!"}
 
@@ -218,6 +250,12 @@ async def create_tag(tag_model: TagModel, db: Database):
         )
     new_tag = Tag(name=tag_model.name, scope=TagScope.GLOBAL)
     db.add(new_tag)
+    await add_log(
+        action=ActivityAction.TAG_CREATED,
+        description=f"Global Tag '{tag_model.name}' was  Created  ",
+        db=db,
+        role=UserRole.ADMIN,
+    )
     await db.commit()
     return {"message": "successfully create GLOBAL Tag"}
 
@@ -255,7 +293,14 @@ async def delete_tag_with_id(db: Database, tag_id: int):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found"
         )
+    await add_log(
+        action=ActivityAction.TAG_DELETED,
+        description=f"Global Tag '{tag.name}' was  Deleted  ",
+        db=db,
+        role=UserRole.ADMIN,
+    )
     await db.delete(tag)
+
     await db.commit()
     return {"message": "Tag deleted successfully!"}
 
@@ -285,6 +330,12 @@ async def update_tag_with_id(db: Database, tag_model: TagModel, tag_id: int):
             detail="Not passed requirement fields",
         )
     tag.name = tag_model.name
+    await add_log(
+        action=ActivityAction.TAG_UPDATED,
+        description=f"Global Tag '{tag.name}' was  Updated  ",
+        db=db,
+        role=UserRole.ADMIN,
+    )
     await db.commit()
     return {"message": "update tag is successfully!"}
 

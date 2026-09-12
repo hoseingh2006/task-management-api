@@ -4,8 +4,10 @@ from sqlalchemy.orm import selectinload
 from starlette import status
 
 from app.database.dependency import (
+    ActivityAction,
     Database,
     GetUser,
+    add_log,
     calculate_due_time,
     has_dependency_cycle,
 )
@@ -15,20 +17,20 @@ from app.models.model_task import (
     TagScope,
     Task,
     TaskAssignee,
+    TaskComment,
     TaskDependency,
     TaskLabel,
-    TaskComment,
 )
 from app.models.model_user import User
 from app.schemas.schema_task import (
     TagProjectModel,
     TagTaskModel,
+    TaskCommentModel,
     TaskDependencyDelete,
     TaskModel,
     TaskStatus,
     TaskStatusUpdateModel,
     TaskUpdateModel,
-    TaskCommentModel,
 )
 
 
@@ -126,10 +128,16 @@ async def create_task(
     )
 
     task.assignees = users
-
     db.add(task)
     await db.flush()
-
+    await add_log(
+        action=ActivityAction.TASK_CREATED,
+        description=f"Task '{task.title}' was created",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+        task_id=task.id,
+    )
     tag_ids = set(task_model.tags_id)
 
     if tag_ids:
@@ -156,6 +164,14 @@ async def create_task(
                     tag_id=tag.id,
                 )
             )
+            await add_log(
+                action=ActivityAction.TAG_ADDED_TO_TASK,
+                description=f"Tag '{tag.name}' add {task.title}",
+                db=db,
+                current_user=current_user,
+                project_id=project_id,
+                task_id=task.id,
+            )
     dependency_ids = set(task_model.dependency_ids)
     if dependency_ids:
         result = await db.scalars(
@@ -174,6 +190,14 @@ async def create_task(
         for dependency_task in dependency_tasks:
             db.add(
                 TaskDependency(task_id=task.id, depends_on_task_id=dependency_task.id)
+            )
+            await add_log(
+                action=ActivityAction.DEPENDENCY_ADDED,
+                description=f"dependency add '{task.title}' add {dependency_task.title}",
+                db=db,
+                current_user=current_user,
+                project_id=project_id,
+                task_id=task.id,
             )
 
     await db.commit()
@@ -356,6 +380,14 @@ async def update_task(
             users = []
 
         task.assignees = users
+    await add_log(
+        action=ActivityAction.TASK_UPDATED,
+        description=f"Task '{task.title}' Updated",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+        task_id=task.id,
+    )
 
     if task_model.dependency_ids is not None:
         dependency_ids = set(task_model.dependency_ids)
@@ -415,6 +447,14 @@ async def update_task(
                     depends_on_task_id=dependency_task.id,
                 )
             )
+            await add_log(
+                action=ActivityAction.DEPENDENCY_UPDATED,
+                description=f"Dependency '{dependency_task.title}' Updated",
+                db=db,
+                current_user=current_user,
+                project_id=project_id,
+                task_id=task.id,
+            )
 
 
 async def delete_task(
@@ -446,6 +486,14 @@ async def delete_task(
         task.is_active = False
         task.status = TaskStatus.ARCHIVED
         await db.commit()
+        await add_log(
+            action=ActivityAction.TASK_DELETED,
+            description=f"Task '{task.title}' Deleted",
+            db=db,
+            current_user=current_user,
+            project_id=project_id,
+            task_id=task.id,
+        )
         return {"massage": "delete successfully!"}
     else:
         raise HTTPException(
@@ -522,6 +570,14 @@ async def update_task_status(
             status.HTTP_400_BAD_REQUEST, detail="for archive use delete endpoint"
         )
     task.status = status_model.status
+    await add_log(
+        action=ActivityAction.TASK_STATUS_CHANGED,
+        description=f"Task '{task.title}' Status Changed to '{task.status}'",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+        task_id=task.id,
+    )
     await db.commit()
     await db.refresh(task)
     return {"message": "successfully update task status "}
@@ -571,6 +627,13 @@ async def create_tag(
             status_code=status.HTTP_409_CONFLICT, detail="already exists tag in project"
         )
     new_tag = Tag(project_id=project_id, name=tag_model.name)
+    await add_log(
+        action=ActivityAction.TAG_CREATED,
+        description=f"Tag '{tag_model.name}' was crated",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+    )
     db.add(new_tag)
     await db.commit()
     await db.refresh(new_tag)
@@ -616,8 +679,15 @@ async def update_tag(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tag not found in this project",
         )
-
+    await add_log(
+        action=ActivityAction.TAG_UPDATED,
+        description=f"Tag Old '{tag.name}' Updated To {tag_model.name}",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+    )
     tag.name = tag_model.name
+
     await db.commit()
     return {"message": "update tag successfully"}
 
@@ -660,7 +730,13 @@ async def delete_tag(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tag not found in this project",
         )
-
+    await add_log(
+        action=ActivityAction.TAG_DELETED,
+        description=f"Tag '{tag.name}' was Deleted",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+    )
     await db.delete(tag)
     await db.commit()
     return {"message": "delete tag successfully"}
@@ -822,6 +898,14 @@ async def add_tags_to_task(
                 tag_id=tag.id,
             )
         )
+        await add_log(
+            action=ActivityAction.TAG_ADDED_TO_TASK,
+            description=f"Tag '{tag.name}' Add to '{task.title}'",
+            db=db,
+            current_user=current_user,
+            project_id=project_id,
+            task_id=task_id,
+        )
     await db.commit()
 
     return {"message": "successfully create Tag"}
@@ -931,6 +1015,14 @@ async def create_subtask(
         priority=task_model.priority,
         creator_id=current_user.id,
     )
+    await add_log(
+        action=ActivityAction.SUBTASK_CREATED,
+        description=f"subtask '{subtask.title}' Add to '{task.title}'",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+        task_id=task_id,
+    )
 
     subtask.assignees = users
 
@@ -962,6 +1054,14 @@ async def create_subtask(
                     task_id=subtask.id,
                     tag_id=tag.id,
                 )
+            )
+            await add_log(
+                action=ActivityAction.TAG_ADDED_TO_TASK,
+                description=f"subtask '{tag.name}' Add to '{subtask.title}'",
+                db=db,
+                current_user=current_user,
+                project_id=project_id,
+                task_id=task_id,
             )
     await db.commit()
     await db.refresh(subtask)
@@ -1089,6 +1189,14 @@ async def update_subtask(
             value=task_model.due_value,
             unit=task_model.due_unit,
         )
+    await add_log(
+        action=ActivityAction.SUBTASK_UPDATED,
+        description=f"subtask '{subtask.title}' was updated",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+        task_id=task_id,
+    )
     if task_model.assignee_ids is not None:
         assignee_ids = set(task_model.assignee_ids)
         if assignee_ids:
@@ -1114,6 +1222,14 @@ async def update_subtask(
             users = []
 
         subtask.assignees = users
+        await add_log(
+            action=ActivityAction.TASK_ASSIGNED,
+            description=f"subtask '{subtask.title}' was Assigned updated",
+            db=db,
+            current_user=current_user,
+            project_id=project_id,
+            task_id=task_id,
+        )
     await db.commit()
     await db.refresh(subtask)
     return {"message": "Subtask updated successfully"}
@@ -1194,6 +1310,14 @@ async def delete_subtask(
             detail="Subtask not found",
         )
     subtask.is_active = False
+    await add_log(
+        action=ActivityAction.SUBTASK_DELETED,
+        description=f"subtask '{subtask.title}' was Deleted",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+        task_id=task_id,
+    )
     await db.commit()
     return {"message": "Subtask deleted successfully"}
 
@@ -1300,6 +1424,14 @@ async def delete_task_dependency(
     dependencies = result.all()
     for dependency in dependencies:
         await db.delete(dependency)
+        await add_log(
+            action=ActivityAction.DEPENDENCY_REMOVED,
+            description=f"Depends '{task.title}' was Deleted",
+            db=db,
+            current_user=current_user,
+            project_id=project_id,
+            task_id=task_id,
+        )
     await db.commit()
     return {"message": "delete depends tasks successfully"}
 
@@ -1343,6 +1475,13 @@ async def add_task_comment(
         content=model_comment.content, creator_id=current_user.id, task_id=task_id
     )
     db.add(task_comment)
+    await add_log(
+        action=ActivityAction.COMMENT_CREATED,
+        description=f"Comment '{model_comment.content}' add to '{task.title}' ",
+        db=db,
+        current_user=current_user,
+        task_id=task_id,
+    )
     await db.commit()
     return {"message": "add comment successfully!"}
 
@@ -1431,6 +1570,13 @@ async def delete_task_comment(
         )
 
     await db.delete(comment)
+    await add_log(
+        action=ActivityAction.COMMENT_CREATED,
+        description=f"Comment '{comment.content}' Deleted to '{task.title}' ",
+        db=db,
+        current_user=current_user,
+        task_id=task_id,
+    )
     await db.commit()
     return {"message": "delete comment successfully"}
 
@@ -1479,6 +1625,14 @@ async def update_task_comment(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to update this comment",
         )
+    await add_log(
+        action=ActivityAction.COMMENT_CREATED,
+        description=f"Old Comment '{comment.content}' updated to '{model_comment.content}' ",
+        db=db,
+        current_user=current_user,
+        task_id=task_id,
+    )
     comment.content = model_comment.content
+
     await db.commit()
     return {"message": "update comment successfully"}

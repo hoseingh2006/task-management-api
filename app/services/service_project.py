@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from starlette import status
 
-from app.database.dependency import Database, GetUser
+from app.database.dependency import ActivityAction, Database, GetUser, add_log
 from app.models.model_project import Project, ProjectMembers, ProjectRole, ProjectStatus
 from app.models.model_user import User
 from app.schemas.schema_project import (
@@ -28,6 +28,13 @@ async def create_project(
         project_id=project_id, user_id=user_id, role=ProjectRole.OWNER
     )
     db.add(project_ember)
+    await add_log(
+        action=ActivityAction.PROJECT_CREATED,
+        description=f"Project '{project_model.name}' was created",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+    )
     await db.commit()
     await db.refresh(project)
 
@@ -88,6 +95,13 @@ async def update_project(
         project.name = project_model.name
     if project_model.description:
         project.description = project_model.description
+    await add_log(
+        action=ActivityAction.PROJECT_UPDATED,
+        description=f"Project '{project.name}' was Updated",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+    )
     await db.commit()
     await db.refresh(project)
     return {"message": "Project updated successfully!"}
@@ -112,6 +126,13 @@ async def delete_project(current_user: GetUser, db: Database, project_id: int):
         )
     project.is_active = False
     project.status = ProjectStatus.ARCHIVED
+    await add_log(
+        action=ActivityAction.PROJECT_DELETED,
+        description=f"Project '{project.name}' was Deleted",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+    )
     await db.commit()
     await db.refresh(project)
     return {"message": "Project deleted successfully!"}
@@ -138,6 +159,13 @@ async def update_project_status(
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="project not found!")
     project.status = status_model.status
+    await add_log(
+        action=ActivityAction.PROJECT_STATUS_CHANGED,
+        description=f"Project '{project.name}' Status was Changed",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+    )
     await db.commit()
     await db.refresh(project)
     return {"message": "Project status updated successfully!"}
@@ -145,35 +173,78 @@ async def update_project_status(
 
 ##########Member Project Routers##########
 async def project_member(
-    member_model: ProjectMember, db: Database, current_user: GetUser, project_id: int
+    member_model: ProjectMember,
+    db: Database,
+    current_user: GetUser,
+    project_id: int,
 ):
     if member_model.role == ProjectRole.OWNER:
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="one project cant have two owner",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A project can only have one owner",
         )
-    result = await db.scalars(
+
+    role_member = await db.scalar(
         select(ProjectMembers).where(
             ProjectMembers.project_id == project_id,
             ProjectMembers.user_id == current_user.id,
         )
     )
-    role_member = result.first()
+
     if role_member is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not Found Project")
-    if role_member.role not in (ProjectRole.OWNER, ProjectRole.MANAGER):
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    if role_member.role not in (
+        ProjectRole.OWNER,
+        ProjectRole.MANAGER,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to add members to this project.",
         )
 
-    project_member = ProjectMembers(
-        project_id=project_id, user_id=member_model.user_id, role=member_model.role
+    user = await db.scalar(select(User).where(User.id == member_model.user_id))
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    existing_member = await db.scalar(
+        select(ProjectMembers).where(
+            ProjectMembers.project_id == project_id,
+            ProjectMembers.user_id == member_model.user_id,
+        )
     )
+
+    if existing_member is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User is already a member of this project",
+        )
+
+    project_member = ProjectMembers(
+        project_id=project_id,
+        user_id=member_model.user_id,
+        role=member_model.role,
+    )
+
     db.add(project_member)
+    await add_log(
+        action=ActivityAction.MEMBER_ADDED,
+        description=f"Project '{project_id}' was Add Member",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+    )
     await db.commit()
     await db.refresh(project_member)
-    return {"message": "Project member add successfully!"}
+
+    return {"message": "Project member added successfully!"}
 
 
 async def project_update_member(
@@ -207,6 +278,13 @@ async def project_update_member(
     if member is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not Found Project")
     member.role = member_model.role
+    await add_log(
+        action=ActivityAction.MEMBER_ROLE_CHANGED,
+        description=f"Project '{project_id}' was Member Role Change to '{member.role}' ",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+    )
     await db.commit()
     await db.refresh(member)
     return {"message": "Project member update successfully!"}
@@ -248,6 +326,13 @@ async def project_delete_member(
             detail="Project owner cannot be removed.",
         )
     await db.delete(member)
+    await add_log(
+        action=ActivityAction.MEMBER_REMOVED,
+        description=f"Project '{project_id}' was Member Deleted '{user_id}' ",
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+    )
     await db.commit()
     return {"message": " member deleted successfully!"}
 

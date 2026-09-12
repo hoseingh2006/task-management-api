@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from enum import StrEnum
 from typing import Annotated
 
 import jwt
@@ -11,7 +12,7 @@ from starlette import status
 from app.core.security import ALGORITHM, SECRET_KEY, oauth2_scheme
 from app.database.database import LocalSession
 from app.models.model_task import TaskDependency, TimeUnit
-from app.models.model_user import User, UserRole
+from app.models.model_user import ActivityLog, User, UserRole
 
 
 async def get_db():
@@ -119,3 +120,77 @@ async def has_dependency_cycle(
         stack.extend(result.all())
 
     return False
+
+
+class ActivityAction(StrEnum):
+    # Project
+    PROJECT_CREATED = "project_created"
+    PROJECT_UPDATED = "project_updated"
+    PROJECT_DELETED = "project_deleted"
+    PROJECT_STATUS_CHANGED = "project_status_changed"
+
+    # Task
+    TASK_CREATED = "task_created"
+    TASK_UPDATED = "task_updated"
+    TASK_DELETED = "task_deleted"
+    TASK_STATUS_CHANGED = "task_status_changed"
+
+    # Subtask
+    SUBTASK_CREATED = "subtask_created"
+    SUBTASK_UPDATED = "subtask_updated"
+    SUBTASK_DELETED = "subtask_deleted"
+    SUBTASK_STATUS_CHANGED = "subtask_status_changed"
+
+    # Tag
+    TAG_CREATED = "tag_created"
+    TAG_UPDATED = "tag_updated"
+    TAG_DELETED = "tag_deleted"
+
+    # Comment
+    COMMENT_CREATED = "comment_created"
+    COMMENT_UPDATED = "comment_updated"
+    COMMENT_DELETED = "comment_deleted"
+
+    # User
+    USER_CREATED = "user_created"
+    USER_UPDATED = "user_updated"
+    USER_DELETED = "user_deleted"
+
+    # Project Member
+    MEMBER_ADDED = "member_added"
+    MEMBER_REMOVED = "member_removed"
+    MEMBER_ROLE_CHANGED = "member_role_changed"
+
+    # Task relations
+    TASK_ASSIGNED = "task_assigned"
+    TASK_UNASSIGNED = "task_unassigned"
+
+    # Tag relations
+    TAG_ADDED_TO_TASK = "tag_added_to_task"
+    TAG_REMOVED_FROM_TASK = "tag_removed_from_task"
+
+    # Dependency
+    DEPENDENCY_ADDED = "dependency_added"
+    DEPENDENCY_UPDATED = "dependency_updated"
+    DEPENDENCY_REMOVED = "dependency_removed"
+
+
+async def add_log(
+    action: ActivityAction,
+    description: str,
+    db: Database,
+    current_user: GetUser | None = None,
+    project_id: int | None = None,
+    task_id: int | None = None,
+    role: UserRole | None = None,
+):
+    activity = ActivityLog(
+        action=action,
+        description=description,
+        user_id=current_user.id,
+        project_id=project_id,
+        task_id=task_id,
+        role=role,
+    )
+
+    db.add(activity)
