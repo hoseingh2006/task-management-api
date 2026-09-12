@@ -7,7 +7,7 @@ from app.core.security import Password_hash
 from app.database.dependency import ActivityAction, Database, add_log
 from app.models.model_project import Project, ProjectMembers
 from app.models.model_task import Tag, TagScope, Task
-from app.models.model_user import User
+from app.models.model_user import ActivityLog, User
 from app.schemas.schema_admin import (
     TagModel,
     UserRole,
@@ -203,6 +203,13 @@ async def delete_task(
 
 ######dashboard############
 async def dashboard(db: Database):
+    user_logs = await db.scalar(
+        select(func.count(ActivityLog.id).where(ActivityLog.role == UserRole.USER))
+    )
+    admin_logs = await db.scalar(
+        select(func.count(ActivityLog.id).where(ActivityLog.role == UserRole.ADMIN))
+    )
+
     task_active = await db.scalar(
         select(func.count(Task.id)).where(Task.is_active.is_(True))
     )
@@ -235,6 +242,8 @@ async def dashboard(db: Database):
         "user_active": user_active,
         "user_deactivate": user_deactivate,
         "admins": admins,
+        "admin_logs": admin_logs,
+        "user_logs": user_logs,
     }
 
 
@@ -357,3 +366,48 @@ async def get_subtask_id(task_id: int, db: Database):
             status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
         )
     return task
+
+
+######Activity Log############
+async def get_all_log(db: Database):
+    result = await db.scalars(select(ActivityLog))
+    logs = result.all()
+    return logs
+
+
+async def get_all_user_log(db: Database):
+    result = await db.scalars(
+        select(ActivityLog).where(ActivityLog.role == UserRole.USER)
+    )
+    logs = result.all()
+    return logs
+
+
+async def get_all_Admin_log(db: Database):
+    result = await db.scalars(
+        select(ActivityLog).where(ActivityLog.role == UserRole.ADMIN)
+    )
+    logs = result.all()
+    return logs
+
+
+async def get_user_log_by_user_id(db: Database, user_id: int):
+    result = await db.scalars(
+        select(ActivityLog).where(
+            ActivityLog.role == UserRole.USER, ActivityLog.user_id == user_id
+        )
+    )
+    logs = result.all()
+    return logs
+
+
+async def get_log_by_task_id(db: Database, task_id: int):
+    result = await db.scalars(select(ActivityLog).where(ActivityLog.task_id == task_id))
+    logs = result.all()
+    return logs
+
+
+async def get_log_by_action(db: Database, action: str):
+    result = await db.scalars(select(ActivityLog).where(ActivityLog.action == action))
+    logs = result.all()
+    return logs
