@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 from starlette import status
 
@@ -9,6 +9,8 @@ from app.database.dependency import (
     GetUser,
     add_log,
     calculate_due_time,
+    calculate_offset,
+    calculate_pages,
     find_mentions,
     has_dependency_cycle,
 )
@@ -132,8 +134,22 @@ async def create_task(
     )
 
     task.assignees = users  # type: ignore
+
     db.add(task)
     await db.flush()
+    for user in task.assignees:
+        if user.id == current_user.id:
+            continue
+        notification = Notification(
+            creator_id=current_user.id,
+            user_id=user.id,
+            type=NotificationType.TASK_ASSIGNED,
+            title=f"User '{current_user.username}'  Add to Task",
+            message=f"User '{current_user.username}' Add to Task '{task.title}' ",
+            project_id=task.project_id,
+            task_id=task.id,
+        )
+        db.add(notification)
     add_log(
         action=ActivityAction.TASK_CREATED,
         description=f"Task '{task.title}' was created",
@@ -212,7 +228,10 @@ async def create_task(
     }
 
 
-async def get_tasks(current_user: GetUser, db: Database, project_id: int):
+async def get_tasks(
+    current_user: GetUser, db: Database, project_id: int, page: int, page_size: int
+):
+
     project_result = await db.execute(
         select(Project.id, ProjectMembers.role)
         .join(ProjectMembers, Project.id == ProjectMembers.project_id)
@@ -226,12 +245,41 @@ async def get_tasks(current_user: GetUser, db: Database, project_id: int):
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found project")
     if project.role in (ProjectRole.OWNER, ProjectRole.MANAGER):
-        tasks = await db.scalars(
-            select(Task).where(
+        total = await db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(
                 Task.project_id == project.id,
+                Task.is_active.is_(True),
             )
         )
-        return tasks.all()
+        tasks = await db.scalars(
+            select(Task)
+            .where(
+                Task.project_id == project.id,
+                Task.is_active.is_(True),
+            )
+            .order_by(Task.id)
+            .offset(calculate_offset(page, page_size))
+            .limit(page_size)
+        )
+        return {
+            "items": tasks.all(),
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "pages": calculate_pages(total, page_size),  # type: ignore
+        }
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Task)
+        .join(TaskAssignee, Task.id == TaskAssignee.task_id)
+        .where(
+            Task.project_id == project_id,
+            TaskAssignee.user_id == current_user.id,
+            Task.is_active.is_(True),
+        )
+    )
     user_task = await db.scalars(
         select(Task)
         .join(TaskAssignee, Task.id == TaskAssignee.task_id)
@@ -240,8 +288,17 @@ async def get_tasks(current_user: GetUser, db: Database, project_id: int):
             TaskAssignee.user_id == current_user.id,
             Task.is_active.is_(True),
         )
+        .order_by(Task.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
-    return user_task.all()
+    return {
+        "items": user_task.all(),
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def get_task_id(
@@ -384,6 +441,19 @@ async def update_task(
             users = []
 
         task.assignees = users  # type: ignore
+        for user in task.assignees:
+            if user.id == current_user.id:
+                continue
+            notification = Notification(
+                creator_id=current_user.id,
+                user_id=user.id,
+                type=NotificationType.TASK_UPDATED,
+                title=f"Task '{task.title}'  Updated",
+                message=f"User '{current_user.username}' Updated Task ",
+                project_id=task.project_id,
+                task_id=task.id,
+            )
+            db.add(notification)
     add_log(
         action=ActivityAction.TASK_UPDATED,
         description=f"Task '{task.title}' Updated",
@@ -549,7 +619,7 @@ async def update_task_status(
     task = result.first()
     if task is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not find task")
-    if status_model.status is (TaskStatus.COMPLETED, TaskStatus.IN_PROGRESS):
+    if status_model.status in (TaskStatus.COMPLETED, TaskStatus.IN_PROGRESS):
         result = await db.scalars(
             select(Task.status)
             .join(TaskDependency, TaskDependency.depends_on_task_id == Task.id)
@@ -569,7 +639,24 @@ async def update_task_status(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="for archive use delete endpoint"
         )
+    for user in task.assignees:
+        if user.id == current_user.id:
+            continue
+        notification = Notification(
+            creator_id=current_user.id,
+            user_id=user.id,
+            type=NotificationType.TASK_STATUS_CHANGED,
+            title=f"Task '{task.title}' status changed",
+            message=(
+                f"User '{current_user.username}' changed the task status "
+                f"to '{status_model.status.value}'."
+            ),
+            project_id=task.project_id,
+            task_id=task.id,
+        )
+        db.add(notification)
     task.status = status_model.status
+
     add_log(
         action=ActivityAction.TASK_STATUS_CHANGED,
         description=f"Task '{task.title}' Status Changed to '{task.status}'",
@@ -743,9 +830,7 @@ async def delete_tag(
 
 
 async def select_all_project_tag(
-    db: Database,
-    current_user: GetUser,
-    project_id: int,
+    db: Database, current_user: GetUser, project_id: int, page: int, page_size: int
 ):
     project_member_result = await db.scalars(
         select(ProjectMembers).where(
@@ -759,22 +844,42 @@ async def select_all_project_tag(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not a member of this project",
         )
-    tag_result = await db.scalars(
-        select(Tag).where(
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Tag)
+        .where(
             or_(
                 Tag.project_id == project_id,
                 Tag.scope == TagScope.GLOBAL,
             )
         )
     )
-    tag = tag_result.all()
-    if not tag:
+    tag_result = await db.scalars(
+        select(Tag)
+        .where(
+            or_(
+                Tag.project_id == project_id,
+                Tag.scope == TagScope.GLOBAL,
+            )
+        )
+        .order_by(Tag.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
+    tags = tag_result.all()
+    if not tags:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tag not found in this project",
         )
 
-    return tag
+    return {
+        "items": tags,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def select_all_tag_with_project_task(
@@ -1072,7 +1177,12 @@ async def create_subtask(
 
 
 async def get_subtask_with_task(
-    current_user: GetUser, db: Database, project_id: int, task_id: int
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    task_id: int,
+    page: int,
+    page_size: int,
 ):
     project_result = await db.execute(
         select(Project.id, ProjectMembers.role)
@@ -1086,15 +1196,34 @@ async def get_subtask_with_task(
     project = project_result.first()
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Project not found")
-    result = await db.scalars(
-        select(Task).where(
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Task)
+        .where(
             Task.project_id == project_id,
             Task.is_active.is_(True),
             Task.parent_task_id == task_id,
         )
     )
+    result = await db.scalars(
+        select(Task)
+        .where(
+            Task.project_id == project_id,
+            Task.is_active.is_(True),
+            Task.parent_task_id == task_id,
+        )
+        .order_by(Task.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
     tasks = result.all()
-    return tasks
+    return {
+        "items": tasks,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def update_subtask(
@@ -1324,7 +1453,12 @@ async def delete_subtask(
 
 ##########task dependency##########
 async def get_task_dependency(
-    current_user: GetUser, db: Database, project_id: int, task_id: int
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    task_id: int,
+    page: int,
+    page_size: int,
 ):
     project_result = await db.execute(
         select(Project.id, ProjectMembers.role)
@@ -1364,17 +1498,36 @@ async def get_task_dependency(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to view this task",
             )
-
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Task)
+        .join(TaskDependency, TaskDependency.depends_on_task_id == Task.id)
+        .where(
+            TaskDependency.task_id == task_id,
+            TaskDependency.task_id == task_id,
+            Task.is_active.is_(True),
+        )
+    )
     result = await db.scalars(
         select(Task)
         .join(TaskDependency, TaskDependency.depends_on_task_id == Task.id)
         .where(
             TaskDependency.task_id == task_id,
+            TaskDependency.task_id == task_id,
             Task.is_active.is_(True),
         )
+        .order_by(Task.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
 
-    return result.all()
+    return {
+        "items": result.all(),
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def delete_task_dependency(
@@ -1536,7 +1689,13 @@ async def add_task_comment(
     return {"message": "add comment successfully!"}
 
 
-async def get_task_comments(current_user: GetUser, db: Database, task_id: int):
+async def get_task_comments(
+    current_user: GetUser,
+    db: Database,
+    task_id: int,
+    page: int,
+    page_size: int,
+):
     task = await db.scalar(
         select(Task).where(Task.id == task_id, Task.is_active.is_(True))
     )
@@ -1568,14 +1727,29 @@ async def get_task_comments(current_user: GetUser, db: Database, task_id: int):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to comment on this task",
             )
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Comment)
+        .where(
+            Comment.task_id == task_id,
+        )
+    )
     comments = await db.scalars(
         select(Comment)
         .where(
             Comment.task_id == task_id,
         )
         .order_by(Comment.created_at.desc())
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
-    return comments.all()
+    return {
+        "items": comments.all(),
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def delete_task_comment(
@@ -1762,6 +1936,7 @@ async def notification_update_read(
     db: Database,
     notification_id: int,
 ):
+
     notification = await db.scalar(
         select(Notification).where(
             Notification.id == notification_id, Notification.user_id == current_user.id
@@ -1836,72 +2011,168 @@ async def get_notification_by_id(
 async def get_all_notification(
     current_user: GetUser,
     db: Database,
+    page: int,
+    page_size: int,
 ):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.user_id == current_user.id)
+    )
     result = await db.scalars(
         select(Notification)
         .where(Notification.user_id == current_user.id)
-        .order_by(Notification.created_at.desc())
+        .order_by(
+            Notification.created_at.desc(),
+            Notification.id.desc(),
+        )
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
     notification = result.all()
-    return notification
+    return {
+        "items": notification,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def get_all_unread_notification(
     current_user: GetUser,
     db: Database,
+    page: int,
+    page_size: int,
 ):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.user_id == current_user.id, Notification.is_read.is_(False))
+    )
     result = await db.scalars(
         select(Notification)
         .where(Notification.user_id == current_user.id, Notification.is_read.is_(False))
-        .order_by(Notification.created_at.desc())
+        .order_by(
+            Notification.created_at.desc(),
+            Notification.id.desc(),
+        )
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
     notification = result.all()
-    return notification
+    return {
+        "items": notification,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def get_notification_by_project_id(
     current_user: GetUser,
     db: Database,
     project_id: int,
+    page: int,
+    page_size: int,
 ):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(
+            Notification.project_id == project_id,
+            Notification.user_id == current_user.id,
+        )
+    )
     result = await db.scalars(
         select(Notification)
         .where(
             Notification.project_id == project_id,
             Notification.user_id == current_user.id,
         )
-        .order_by(Notification.created_at.desc())
+        .order_by(
+            Notification.created_at.desc(),
+            Notification.id.desc(),
+        )
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
     notification = result.all()
-    return notification
+    return {
+        "items": notification,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def get_notification_by_task_id(
     current_user: GetUser,
     db: Database,
     task_id: int,
+    page: int,
+    page_size: int,
 ):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.task_id == task_id, Notification.user_id == current_user.id)
+    )
     result = await db.scalars(
         select(Notification)
         .where(Notification.task_id == task_id, Notification.user_id == current_user.id)
-        .order_by(Notification.created_at.desc())
+        .order_by(
+            Notification.created_at.desc(),
+            Notification.id.desc(),
+        )
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
     notification = result.all()
-    return notification
+    return {
+        "items": notification,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def get_notification_by_comment_id(
     current_user: GetUser,
     db: Database,
     comment_id: int,
+    page: int,
+    page_size: int,
 ):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(
+            Notification.comment_id == comment_id,
+            Notification.user_id == current_user.id,
+        )
+    )
     result = await db.scalars(
         select(Notification)
         .where(
             Notification.comment_id == comment_id,
             Notification.user_id == current_user.id,
         )
-        .order_by(Notification.created_at.desc())
+        .order_by(
+            Notification.created_at.desc(),
+            Notification.id.desc(),
+        )
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
     notification = result.all()
-    return notification
+    return {
+        "items": notification,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }

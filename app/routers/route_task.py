@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from starlette import status
 
 from app.database.dependency import Database, GetUser
@@ -31,9 +31,15 @@ async def get_tasks(
     current_user: GetUser,
     project_id: int,
     db: Database,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
 ):
     return await service_task.get_tasks(
-        current_user=current_user, project_id=project_id, db=db
+        current_user=current_user,
+        project_id=project_id,
+        db=db,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -129,9 +135,15 @@ async def get_all_project_tag(
     current_user: GetUser,
     project_id: int,
     db: Database,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
 ):
     return await service_task.select_all_project_tag(
-        current_user=current_user, project_id=project_id, db=db
+        current_user=current_user,
+        project_id=project_id,
+        db=db,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -192,12 +204,16 @@ async def get_subtask_with_task(
     project_id: int,
     db: Database,
     task_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
 ):
     return await service_task.get_subtask_with_task(
         current_user=current_user,
         project_id=project_id,
         db=db,
         task_id=task_id,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -244,12 +260,16 @@ async def get_task_dependency_by_id(
     project_id: int,
     db: Database,
     task_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
 ):
     return await service_task.get_task_dependency(
         current_user=current_user,
         project_id=project_id,
         db=db,
         task_id=task_id,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -291,11 +311,15 @@ async def get_task_comments(
     db: Database,
     task_id: int,
     current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
 ):
     return await service_task.get_task_comments(
         db=db,
         task_id=task_id,
         current_user=current_user,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -341,28 +365,40 @@ async def notification_read_all(
 async def get_all_notification(
     db: Database,
     current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
 ):
-    return await service_task.get_all_notification(db=db, current_user=current_user)
+    return await service_task.get_all_notification(
+        db=db, current_user=current_user, page=page, page_size=page_size
+    )
 
 
 @route.get("/notification/unread", status_code=status.HTTP_200_OK)
 async def get_all_unread_notification(
     db: Database,
     current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
 ):
     return await service_task.get_all_unread_notification(
-        db=db, current_user=current_user
+        db=db, current_user=current_user, page_size=page_size, page=page
     )
 
 
-@route.get("/notification/project/{project_id}", status_code=status.HTTP_200_OK)
+@route.get("/notification/project", status_code=status.HTTP_200_OK)
 async def get_notification_by_project_id(
     db: Database,
     project_id: int,
     current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
 ):
     return await service_task.get_notification_by_project_id(
-        db=db, current_user=current_user, project_id=project_id
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+        page_size=page_size,
+        page=page,
     )
 
 
@@ -371,9 +407,15 @@ async def get_notification_by_task_id(
     db: Database,
     task_id: int,
     current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
 ):
     return await service_task.get_notification_by_task_id(
-        db=db, current_user=current_user, task_id=task_id
+        db=db,
+        current_user=current_user,
+        task_id=task_id,
+        page_size=page_size,
+        page=page,
     )
 
 
@@ -382,9 +424,15 @@ async def get_notification_by_comment_id(
     db: Database,
     comment_id: int,
     current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
 ):
     return await service_task.get_notification_by_comment_id(
-        db=db, current_user=current_user, comment_id=comment_id
+        db=db,
+        current_user=current_user,
+        comment_id=comment_id,
+        page_size=page_size,
+        page=page,
     )
 
 

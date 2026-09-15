@@ -161,6 +161,7 @@ class NotificationType(str, Enum):
 
     TASK_ASSIGNED = "task_assigned"
     TASK_STATUS_CHANGED = "task_status_changed"
+    TASK_UPDATED = "task_updated"
 
     COMMENT_CREATED = "comment_created"
 

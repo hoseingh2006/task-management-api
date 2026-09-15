@@ -210,3 +210,11 @@ def add_log(
 def find_mentions(text):
     pattern = r"@([A-Za-z0-9_]+)"
     return set(re.findall(pattern, text))
+
+
+def calculate_offset(page: int, page_size: int) -> int:
+    return (page - 1) * page_size
+
+
+def calculate_pages(total: int, page_size: int) -> int:
+    return (total // page_size) + 1

@@ -1,5 +1,5 @@
 from app.database.dependency import Database, GetUser  # noqa: I001
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from app.schemas.schema_project import (
     ProjectModel,
     ProjectStatusUpdateModel,
@@ -24,8 +24,15 @@ async def create_project(
 
 
 @route.get("/", status_code=status.HTTP_200_OK)
-async def get_project(current_user: GetUser, db: Database):
-    return await service_project.get_project(db=db, current_user=current_user)
+async def get_project(
+    current_user: GetUser,
+    db: Database,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
+):
+    return await service_project.get_project(
+        db=db, current_user=current_user, page=page, page_size=page_size
+    )
 
 
 @route.get("/{project_id}", status_code=status.HTTP_200_OK)
@@ -111,11 +118,15 @@ async def get_project_members(
     current_user: GetUser,
     db: Database,
     project_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
 ):
     return await service_project.get_project_members(
         current_user=current_user,
         db=db,
         project_id=project_id,
+        page=page,
+        page_size=page_size,
     )
 
 

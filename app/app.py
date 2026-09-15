@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+
 from .routers import auth, route_admin, route_project, route_task, route_user
 
 app = FastAPI()

@@ -4,7 +4,13 @@ from sqlalchemy.orm import selectinload
 from starlette import status
 
 from app.core.security import Password_hash
-from app.database.dependency import ActivityAction, Database, add_log
+from app.database.dependency import (
+    ActivityAction,
+    Database,
+    add_log,
+    calculate_offset,
+    calculate_pages,
+)
 from app.models.model_project import Project, ProjectMembers
 from app.models.model_task import Tag, TagScope, Task
 from app.models.model_user import ActivityLog, User
@@ -17,10 +23,22 @@ from app.schemas.schema_admin import (
 
 
 ######user############
-async def get_user(db: Database):
-    result = await db.scalars(select(User))
+async def get_user(db: Database, page: int, page_size: int):
+    total = await db.scalar(select(func.count()).select_from(User))
+    result = await db.scalars(
+        select(User)
+        .order_by(User.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
     users = result.all()
-    return users
+    return {
+        "items": users,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def get_user_id(user_id: int, db: Database):
@@ -106,10 +124,22 @@ async def update_password_user(
 
 
 ######project############
-async def get_projects(db: Database):
-    result = await db.scalars(select(Project))
+async def get_projects(db: Database, page: int, page_size: int):
+    total = await db.scalar(select(func.count()).select_from(Project))
+    result = await db.scalars(
+        select(Project)
+        .order_by(Project.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
     projects = result.all()
-    return projects
+    return {
+        "items": projects,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def get_project_id(project_id: int, db: Database):
@@ -144,29 +174,49 @@ async def delete_project(
     return {"massage": "successfully deleted!"}
 
 
-async def get_project_member(project_id: int, db: Database):
-    result = await db.scalars(
-        select(Project)
-        .options(selectinload(Project.members).selectinload(ProjectMembers.user))
-        .where(Project.id == project_id)
+async def get_project_member(project_id: int, db: Database, page: int, page_size: int):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(ProjectMembers)
+        .where(ProjectMembers.project_id == project_id)
     )
-    project = result.first()
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-        )
-    project_member = []
-    for i in project.members:
-        if i.user_id is not None:
-            project_member.append(i)
-    return project_member
+
+    result = await db.scalars(
+        select(ProjectMembers)
+        .options(selectinload(ProjectMembers.user))
+        .where(ProjectMembers.project_id == project_id)
+        .order_by(ProjectMembers.user_id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
+
+    members = result.all()
+    return {
+        "items": members,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 ######task############
-async def get_tasks(db: Database):
-    result = await db.scalars(select(Task))
+async def get_tasks(db: Database, page: int, page_size: int):
+    total = await db.scalar(select(func.count()).select_from(Task))
+    result = await db.scalars(
+        select(Task)
+        .order_by(Task.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
     tasks = result.all()
-    return tasks
+    return {
+        "items": tasks,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def get_task_id(task_id: int, db: Database):
@@ -269,28 +319,87 @@ async def create_tag(tag_model: TagModel, db: Database):
     return {"message": "successfully create GLOBAL Tag"}
 
 
-async def get_all_tag(db: Database):
-    result_tag = await db.scalars(select(Tag))
+async def get_all_tag(db: Database, page: int, page_size: int):
+    total = await db.scalar(select(func.count()).select_from(Tag))
+    result_tag = await db.scalars(
+        select(Tag)
+        .order_by(Tag.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
     tag = result_tag.all()
-    return tag
+    return {
+        "items": tag,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
-async def get_all_project_tag(db: Database):
-    result_tag = await db.scalars(select(Tag).where(Tag.scope == TagScope.PROJECT))
+async def get_all_project_tag(db: Database, page: int, page_size: int):
+    total = await db.scalar(
+        select(func.count()).select_from(Tag).where(Tag.scope == TagScope.PROJECT)
+    )
+    result_tag = await db.scalars(
+        select(Tag)
+        .where(Tag.scope == TagScope.PROJECT)
+        .order_by(Tag.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
     tag = result_tag.all()
-    return tag
+    return {
+        "items": tag,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
-async def get_all_global_tag(db: Database):
-    result_tag = await db.scalars(select(Tag).where(Tag.scope == TagScope.GLOBAL))
+async def get_all_global_tag(db: Database, page: int, page_size: int):
+    total = await db.scalar(
+        select(func.count()).select_from(Tag).where(Tag.scope == TagScope.GLOBAL)
+    )
+    result_tag = await db.scalars(
+        select(Tag)
+        .where(Tag.scope == TagScope.GLOBAL)
+        .order_by(Tag.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
     tag = result_tag.all()
-    return tag
+    return {
+        "items": tag,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
-async def get_all_tag_with_project(db: Database, project_id: int):
-    result_tag = await db.scalars(select(Tag).where(Tag.project_id == project_id))
+async def get_all_tag_with_project(
+    db: Database, project_id: int, page: int, page_size: int
+):
+    total = await db.scalar(
+        select(func.count()).select_from(Tag).where(Tag.project_id == project_id)
+    )
+    result_tag = await db.scalars(
+        select(Tag)
+        .where(Tag.project_id == project_id)
+        .order_by(Tag.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
     tag = result_tag.all()
-    return tag
+    return {
+        "items": tag,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def delete_tag_with_id(db: Database, tag_id: int):
@@ -350,10 +459,25 @@ async def update_tag_with_id(db: Database, tag_model: TagModel, tag_id: int):
 
 
 ######subtask############
-async def get_subtasks(db: Database):
-    result = await db.scalars(select(Task).where(Task.parent_task_id.is_not(None)))
+async def get_subtasks(db: Database, page: int, page_size: int):
+    total = await db.scalar(
+        select(func.count()).select_from(Task).where(Task.parent_task_id.is_not(None))
+    )
+    result = await db.scalars(
+        select(Task)
+        .where(Task.parent_task_id.is_not(None))
+        .order_by(Task.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
     tasks = result.all()
-    return tasks
+    return {
+        "items": tasks,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
 async def get_subtask_id(task_id: int, db: Database):
@@ -369,53 +493,159 @@ async def get_subtask_id(task_id: int, db: Database):
 
 
 ######Activity Log############
-async def get_all_log(db: Database):
-    result = await db.scalars(select(ActivityLog))
-    logs = result.all()
-    return logs
-
-
-async def get_all_user_log(db: Database):
+async def get_all_log(db: Database, page: int, page_size: int):
+    total = await db.scalar(select(func.count()).select_from(ActivityLog))
     result = await db.scalars(
-        select(ActivityLog).where(ActivityLog.role == UserRole.USER)
+        select(ActivityLog)
+        .order_by(ActivityLog.created_at.desc())
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
     logs = result.all()
-    return logs
+    return {
+        "items": logs,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
-async def get_all_admin_log(db: Database):
+async def get_all_user_log(db: Database, page: int, page_size: int):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(ActivityLog)
+        .where(ActivityLog.role == UserRole.USER)
+    )
     result = await db.scalars(
-        select(ActivityLog).where(ActivityLog.role == UserRole.ADMIN)
+        select(ActivityLog)
+        .where(ActivityLog.role == UserRole.USER)
+        .order_by(ActivityLog.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
     logs = result.all()
-    return logs
+    return {
+        "items": logs,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
-async def get_log_by_user_id(db: Database, user_id: int):
+async def get_all_admin_log(db: Database, page: int, page_size: int):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(ActivityLog)
+        .where(ActivityLog.role == UserRole.ADMIN)
+    )
     result = await db.scalars(
-        select(ActivityLog).where(
-            ActivityLog.role == UserRole.USER, ActivityLog.user_id == user_id
-        )
+        select(ActivityLog)
+        .where(ActivityLog.role == UserRole.ADMIN)
+        .order_by(ActivityLog.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
     logs = result.all()
-    return logs
+    return {
+        "items": logs,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
-async def get_log_by_task_id(db: Database, task_id: int):
-    result = await db.scalars(select(ActivityLog).where(ActivityLog.task_id == task_id))
-    logs = result.all()
-    return logs
-
-
-async def get_log_by_project_id(db: Database, project_id: int):
+async def get_log_by_user_id(db: Database, user_id: int, page: int, page_size: int):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(ActivityLog)
+        .where(ActivityLog.role == UserRole.USER, ActivityLog.user_id == user_id)
+    )
     result = await db.scalars(
-        select(ActivityLog).where(ActivityLog.project_id == project_id)
+        select(ActivityLog)
+        .where(ActivityLog.role == UserRole.USER, ActivityLog.user_id == user_id)
+        .order_by(ActivityLog.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
     )
     logs = result.all()
-    return logs
+    return {
+        "items": logs,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
 
 
-async def get_log_by_action(db: Database, action: str):
-    result = await db.scalars(select(ActivityLog).where(ActivityLog.action == action))
+async def get_log_by_task_id(db: Database, task_id: int, page: int, page_size: int):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(ActivityLog)
+        .where(ActivityLog.task_id == task_id)
+    )
+    result = await db.scalars(
+        select(ActivityLog)
+        .where(ActivityLog.task_id == task_id)
+        .order_by(ActivityLog.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
     logs = result.all()
-    return logs
+    return {
+        "items": logs,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
+
+
+async def get_log_by_project_id(
+    db: Database, project_id: int, page: int, page_size: int
+):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(ActivityLog)
+        .where(ActivityLog.project_id == project_id)
+    )
+    result = await db.scalars(
+        select(ActivityLog)
+        .where(ActivityLog.project_id == project_id)
+        .order_by(ActivityLog.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
+    logs = result.all()
+    return {
+        "items": logs,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
+
+
+async def get_log_by_action(db: Database, action: str, page: int, page_size: int):
+    total = await db.scalar(
+        select(func.count())
+        .select_from(ActivityLog)
+        .where(ActivityLog.action == action)
+    )
+    result = await db.scalars(
+        select(ActivityLog)
+        .where(ActivityLog.action == action)
+        .order_by(ActivityLog.id)
+        .offset(calculate_offset(page, page_size))
+        .limit(page_size)
+    )
+    logs = result.all()
+    return {
+        "items": logs,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": calculate_pages(total, page_size),  # type: ignore
+    }
