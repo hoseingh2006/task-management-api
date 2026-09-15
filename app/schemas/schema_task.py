@@ -40,5 +40,5 @@ class TaskStatusUpdateModel(BaseModel):
     status: TaskStatus
 
 
-class TaskCommentModel(BaseModel):
+class CommentModel(BaseModel):
     content: str

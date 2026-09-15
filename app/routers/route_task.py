@@ -3,9 +3,9 @@ from starlette import status
 
 from app.database.dependency import Database, GetUser
 from app.schemas.schema_task import (
+    CommentModel,
     TagProjectModel,
     TagTaskModel,
-    TaskCommentModel,
     TaskDependencyDelete,
     TaskModel,
     TaskStatusUpdateModel,
@@ -273,7 +273,7 @@ async def delete_task_dependency(
 ##########task comment##########
 @route.post("/{task_id}/comments", status_code=status.HTTP_201_CREATED)
 async def add_task_comment(
-    model_comment: TaskCommentModel,
+    model_comment: CommentModel,
     db: Database,
     task_id: int,
     current_user: GetUser,
@@ -316,7 +316,7 @@ async def update_task_comment(
     db: Database,
     task_id: int,
     current_user: GetUser,
-    model_comment: TaskCommentModel,
+    model_comment: CommentModel,
     task_comment_id: int,
 ):
     return await service_task.update_task_comment(
@@ -325,4 +325,97 @@ async def update_task_comment(
         task_id=task_id,
         current_user=current_user,
         task_comment_id=task_comment_id,
+    )
+
+
+##########task Mention##########
+@route.patch("/notification/read-all", status_code=status.HTTP_200_OK)
+async def notification_read_all(
+    db: Database,
+    current_user: GetUser,
+):
+    return await service_task.notification_read_all(db=db, current_user=current_user)
+
+
+@route.get("/notification", status_code=status.HTTP_200_OK)
+async def get_all_notification(
+    db: Database,
+    current_user: GetUser,
+):
+    return await service_task.get_all_notification(db=db, current_user=current_user)
+
+
+@route.get("/notification/unread", status_code=status.HTTP_200_OK)
+async def get_all_unread_notification(
+    db: Database,
+    current_user: GetUser,
+):
+    return await service_task.get_all_unread_notification(
+        db=db, current_user=current_user
+    )
+
+
+@route.get("/notification/project/{project_id}", status_code=status.HTTP_200_OK)
+async def get_notification_by_project_id(
+    db: Database,
+    project_id: int,
+    current_user: GetUser,
+):
+    return await service_task.get_notification_by_project_id(
+        db=db, current_user=current_user, project_id=project_id
+    )
+
+
+@route.get("/notification/task/{task_id}", status_code=status.HTTP_200_OK)
+async def get_notification_by_task_id(
+    db: Database,
+    task_id: int,
+    current_user: GetUser,
+):
+    return await service_task.get_notification_by_task_id(
+        db=db, current_user=current_user, task_id=task_id
+    )
+
+
+@route.get("/notification/comment/{comment_id}", status_code=status.HTTP_200_OK)
+async def get_notification_by_comment_id(
+    db: Database,
+    comment_id: int,
+    current_user: GetUser,
+):
+    return await service_task.get_notification_by_comment_id(
+        db=db, current_user=current_user, comment_id=comment_id
+    )
+
+
+@route.patch("/notification/{notification_id}/read", status_code=status.HTTP_200_OK)
+async def notification_update_read(
+    db: Database,
+    notification_id: int,
+    current_user: GetUser,
+):
+    return await service_task.notification_update_read(
+        db=db, current_user=current_user, notification_id=notification_id
+    )
+
+
+@route.delete("/notification/{notification_id}", status_code=status.HTTP_200_OK)
+async def notification_delete(
+    db: Database,
+    notification_id: int,
+    current_user: GetUser,
+):
+    return await service_task.notification_delete(
+        db=db, current_user=current_user, notification_id=notification_id
+    )
+
+
+@route.get("/notification/{notification_id}", status_code=status.HTTP_200_OK)
+async def get_notification_by_id(
+    db: Database,
+    notification_id: int,
+    current_user: GetUser,
+):
+    return await service_task.get_notification_by_id(
+        db=db, current_user=current_user, notification_id=notification_id
     )

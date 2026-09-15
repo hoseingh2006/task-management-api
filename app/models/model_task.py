@@ -141,8 +141,8 @@ class TaskDependency(Base):
     )
 
 
-class TaskComment(Base):
-    __tablename__ = "task_comment"
+class Comment(Base):
+    __tablename__ = "comment"
     id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
     content: Mapped[str] = mapped_column(TEXT)
     creator_id: Mapped[int] = mapped_column(INTEGER, ForeignKey("user.id"))
@@ -154,3 +154,51 @@ class TaskComment(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     is_active: Mapped[bool] = mapped_column(BOOLEAN, server_default="True")
+
+
+class NotificationType(str, Enum):
+    MENTION = "mention"
+
+    TASK_ASSIGNED = "task_assigned"
+    TASK_STATUS_CHANGED = "task_status_changed"
+
+    COMMENT_CREATED = "comment_created"
+
+    MEMBER_ADDED = "member_added"
+    MEMBER_REMOVED = "member_removed"
+    MEMBER_ROLE_CHANGED = "member_role_changed"
+
+    PROJECT_STATUS_CHANGED = "project_status_changed"
+
+    DEPENDENCY_ADDED = "dependency_added"
+    DEPENDENCY_REMOVED = "dependency_removed"
+
+
+class Notification(Base):
+    __tablename__ = "notification"
+    id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
+    creator_id: Mapped[int] = mapped_column(INTEGER, ForeignKey("user.id"))
+    user_id: Mapped[int] = mapped_column(
+        INTEGER, ForeignKey("user.id", ondelete="CASCADE")
+    )
+    type: Mapped[NotificationType] = mapped_column(SQLEnum(NotificationType))
+    title: Mapped[str] = mapped_column(VARCHAR(250))
+    message: Mapped[str] = mapped_column(TEXT)
+    project_id: Mapped[int] = mapped_column(INTEGER, ForeignKey("project.id"))
+    task_id: Mapped[int] = mapped_column(INTEGER, ForeignKey("task.id"))
+    comment_id: Mapped[int] = mapped_column(INTEGER, ForeignKey("comment.id"))
+    is_read: Mapped[bool] = mapped_column(BOOLEAN, server_default="False")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class CommentMention(Base):
+    __tablename__ = "comment_mention"
+    id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        INTEGER, ForeignKey("user.id", ondelete="CASCADE")
+    )
+    comment_id: Mapped[int] = mapped_column(
+        INTEGER, ForeignKey("comment.id", ondelete="CASCADE")
+    )

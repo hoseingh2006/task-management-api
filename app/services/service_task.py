@@ -9,23 +9,27 @@ from app.database.dependency import (
     GetUser,
     add_log,
     calculate_due_time,
+    find_mentions,
     has_dependency_cycle,
 )
 from app.models.model_project import Project, ProjectMembers, ProjectRole
 from app.models.model_task import (
+    Comment,
+    CommentMention,
+    Notification,
+    NotificationType,
     Tag,
     TagScope,
     Task,
     TaskAssignee,
-    TaskComment,
     TaskDependency,
     TaskLabel,
 )
 from app.models.model_user import User
 from app.schemas.schema_task import (
+    CommentModel,
     TagProjectModel,
     TagTaskModel,
-    TaskCommentModel,
     TaskDependencyDelete,
     TaskModel,
     TaskStatus,
@@ -127,10 +131,10 @@ async def create_task(
         creator_id=current_user.id,
     )
 
-    task.assignees = users
+    task.assignees = users  # type: ignore
     db.add(task)
     await db.flush()
-    await add_log(
+    add_log(
         action=ActivityAction.TASK_CREATED,
         description=f"Task '{task.title}' was created",
         db=db,
@@ -164,7 +168,7 @@ async def create_task(
                     tag_id=tag.id,
                 )
             )
-            await add_log(
+            add_log(
                 action=ActivityAction.TAG_ADDED_TO_TASK,
                 description=f"Tag '{tag.name}' add {task.title}",
                 db=db,
@@ -191,7 +195,7 @@ async def create_task(
             db.add(
                 TaskDependency(task_id=task.id, depends_on_task_id=dependency_task.id)
             )
-            await add_log(
+            add_log(
                 action=ActivityAction.DEPENDENCY_ADDED,
                 description=f"dependency add '{task.title}' add {dependency_task.title}",
                 db=db,
@@ -379,8 +383,8 @@ async def update_task(
         else:
             users = []
 
-        task.assignees = users
-    await add_log(
+        task.assignees = users  # type: ignore
+    add_log(
         action=ActivityAction.TASK_UPDATED,
         description=f"Task '{task.title}' Updated",
         db=db,
@@ -408,14 +412,12 @@ async def update_task(
                 detail="One or more dependency tasks are invalid",
             )
 
-        # خود Task نمی‌تواند dependency خودش باشد
         if task.id in dependency_ids:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A task cannot depend on itself",
             )
 
-        # اول cycle را بررسی کن
         for dependency_task in dependency_tasks:
             cycle_check = await has_dependency_cycle(
                 db=db,
@@ -429,7 +431,6 @@ async def update_task(
                     detail="This dependency would create a cycle",
                 )
 
-        # حالا dependencyهای قبلی را حذف کن
         result = await db.scalars(
             select(TaskDependency).where(TaskDependency.task_id == task.id)
         )
@@ -439,7 +440,6 @@ async def update_task(
         for dependency in dependencies:
             await db.delete(dependency)
 
-        # dependencyهای جدید را اضافه کن
         for dependency_task in dependency_tasks:
             db.add(
                 TaskDependency(
@@ -447,7 +447,7 @@ async def update_task(
                     depends_on_task_id=dependency_task.id,
                 )
             )
-            await add_log(
+            add_log(
                 action=ActivityAction.DEPENDENCY_UPDATED,
                 description=f"Dependency '{dependency_task.title}' Updated",
                 db=db,
@@ -486,7 +486,7 @@ async def delete_task(
         task.is_active = False
         task.status = TaskStatus.ARCHIVED
         await db.commit()
-        await add_log(
+        add_log(
             action=ActivityAction.TASK_DELETED,
             description=f"Task '{task.title}' Deleted",
             db=db,
@@ -570,7 +570,7 @@ async def update_task_status(
             status.HTTP_400_BAD_REQUEST, detail="for archive use delete endpoint"
         )
     task.status = status_model.status
-    await add_log(
+    add_log(
         action=ActivityAction.TASK_STATUS_CHANGED,
         description=f"Task '{task.title}' Status Changed to '{task.status}'",
         db=db,
@@ -627,7 +627,7 @@ async def create_tag(
             status_code=status.HTTP_409_CONFLICT, detail="already exists tag in project"
         )
     new_tag = Tag(project_id=project_id, name=tag_model.name)
-    await add_log(
+    add_log(
         action=ActivityAction.TAG_CREATED,
         description=f"Tag '{tag_model.name}' was crated",
         db=db,
@@ -679,7 +679,7 @@ async def update_tag(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tag not found in this project",
         )
-    await add_log(
+    add_log(
         action=ActivityAction.TAG_UPDATED,
         description=f"Tag Old '{tag.name}' Updated To {tag_model.name}",
         db=db,
@@ -730,7 +730,7 @@ async def delete_tag(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tag not found in this project",
         )
-    await add_log(
+    add_log(
         action=ActivityAction.TAG_DELETED,
         description=f"Tag '{tag.name}' was Deleted",
         db=db,
@@ -898,7 +898,7 @@ async def add_tags_to_task(
                 tag_id=tag.id,
             )
         )
-        await add_log(
+        add_log(
             action=ActivityAction.TAG_ADDED_TO_TASK,
             description=f"Tag '{tag.name}' Add to '{task.title}'",
             db=db,
@@ -1015,7 +1015,7 @@ async def create_subtask(
         priority=task_model.priority,
         creator_id=current_user.id,
     )
-    await add_log(
+    add_log(
         action=ActivityAction.SUBTASK_CREATED,
         description=f"subtask '{subtask.title}' Add to '{task.title}'",
         db=db,
@@ -1024,7 +1024,7 @@ async def create_subtask(
         task_id=task_id,
     )
 
-    subtask.assignees = users
+    subtask.assignees = users  # type: ignore
 
     db.add(subtask)
     await db.flush()
@@ -1055,7 +1055,7 @@ async def create_subtask(
                     tag_id=tag.id,
                 )
             )
-            await add_log(
+            add_log(
                 action=ActivityAction.TAG_ADDED_TO_TASK,
                 description=f"subtask '{tag.name}' Add to '{subtask.title}'",
                 db=db,
@@ -1187,9 +1187,9 @@ async def update_subtask(
     if task_model.due_value is not None:
         subtask.due_date = calculate_due_time(
             value=task_model.due_value,
-            unit=task_model.due_unit,
+            unit=task_model.due_unit,  # type: ignore
         )
-    await add_log(
+    add_log(
         action=ActivityAction.SUBTASK_UPDATED,
         description=f"subtask '{subtask.title}' was updated",
         db=db,
@@ -1221,8 +1221,8 @@ async def update_subtask(
         else:
             users = []
 
-        subtask.assignees = users
-        await add_log(
+        subtask.assignees = users  # type: ignore
+        add_log(
             action=ActivityAction.TASK_ASSIGNED,
             description=f"subtask '{subtask.title}' was Assigned updated",
             db=db,
@@ -1310,7 +1310,7 @@ async def delete_subtask(
             detail="Subtask not found",
         )
     subtask.is_active = False
-    await add_log(
+    add_log(
         action=ActivityAction.SUBTASK_DELETED,
         description=f"subtask '{subtask.title}' was Deleted",
         db=db,
@@ -1424,7 +1424,7 @@ async def delete_task_dependency(
     dependencies = result.all()
     for dependency in dependencies:
         await db.delete(dependency)
-        await add_log(
+        add_log(
             action=ActivityAction.DEPENDENCY_REMOVED,
             description=f"Depends '{task.title}' was Deleted",
             db=db,
@@ -1438,7 +1438,7 @@ async def delete_task_dependency(
 
 ##########task comment##########
 async def add_task_comment(
-    current_user: GetUser, db: Database, model_comment: TaskCommentModel, task_id: int
+    current_user: GetUser, db: Database, model_comment: CommentModel, task_id: int
 ):
     task = await db.scalar(
         select(Task).where(Task.id == task_id, Task.is_active.is_(True))
@@ -1471,17 +1471,67 @@ async def add_task_comment(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to comment on this task",
             )
-    task_comment = TaskComment(
+    comment = Comment(
         content=model_comment.content, creator_id=current_user.id, task_id=task_id
     )
-    db.add(task_comment)
-    await add_log(
+    db.add(comment)
+    await db.flush()
+    add_log(
         action=ActivityAction.COMMENT_CREATED,
         description=f"Comment '{model_comment.content}' add to '{task.title}' ",
         db=db,
         current_user=current_user,
         task_id=task_id,
     )
+    username_mentions = find_mentions(model_comment.content)
+    result = await db.scalars(
+        select(User.id).where(
+            User.username.in_(username_mentions),
+            User.is_active.is_(True),
+            User.id != current_user.id,
+        )
+    )
+    user_ids = result.all()
+    if user_ids:
+        result = await db.execute(
+            select(ProjectMembers.role, ProjectMembers.user_id).where(
+                ProjectMembers.project_id == task.project_id,
+                ProjectMembers.user_id.in_(user_ids),
+            )
+        )
+        project_users = result.all()
+        assignee_result = await db.scalars(
+            select(TaskAssignee.user_id).where(
+                TaskAssignee.task_id == task.id,
+                TaskAssignee.user_id.in_(user_ids),
+            )
+        )
+
+        assignee_ids = set(assignee_result.all())
+        for role, user_id in project_users:
+            if (
+                role not in (ProjectRole.OWNER, ProjectRole.MANAGER)
+                and user_id not in assignee_ids
+            ):
+                continue
+
+            notification = Notification(
+                creator_id=current_user.id,
+                user_id=user_id,
+                type=NotificationType.MENTION,
+                title=f"User {current_user.username} mentioned you",
+                message=model_comment.content,
+                project_id=task.project_id,
+                task_id=task.id,
+                comment_id=comment.id,
+            )
+            db.add(notification)
+
+            mention = CommentMention(
+                user_id=user_id,
+                comment_id=comment.id,
+            )
+            db.add(mention)
     await db.commit()
     return {"message": "add comment successfully!"}
 
@@ -1519,11 +1569,11 @@ async def get_task_comments(current_user: GetUser, db: Database, task_id: int):
                 detail="You don't have permission to comment on this task",
             )
     comments = await db.scalars(
-        select(TaskComment)
+        select(Comment)
         .where(
-            TaskComment.task_id == task_id,
+            Comment.task_id == task_id,
         )
-        .order_by(TaskComment.created_at.desc())
+        .order_by(Comment.created_at.desc())
     )
     return comments.all()
 
@@ -1551,9 +1601,7 @@ async def delete_task_comment(
             detail="You are not a member of this project",
         )
     comment = await db.scalar(
-        select(TaskComment).where(
-            TaskComment.task_id == task_id, TaskComment.id == task_comment_id
-        )
+        select(Comment).where(Comment.task_id == task_id, Comment.id == task_comment_id)
     )
     if comment is None:
         raise HTTPException(
@@ -1568,9 +1616,8 @@ async def delete_task_comment(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to delete this comment",
         )
-
     await db.delete(comment)
-    await add_log(
+    add_log(
         action=ActivityAction.COMMENT_CREATED,
         description=f"Comment '{comment.content}' Deleted to '{task.title}' ",
         db=db,
@@ -1583,7 +1630,7 @@ async def delete_task_comment(
 
 async def update_task_comment(
     current_user: GetUser,
-    model_comment: TaskCommentModel,
+    model_comment: CommentModel,
     db: Database,
     task_id: int,
     task_comment_id: int,
@@ -1608,9 +1655,7 @@ async def update_task_comment(
             detail="You are not a member of this project",
         )
     comment = await db.scalar(
-        select(TaskComment).where(
-            TaskComment.task_id == task_id, TaskComment.id == task_comment_id
-        )
+        select(Comment).where(Comment.task_id == task_id, Comment.id == task_comment_id)
     )
     if comment is None:
         raise HTTPException(
@@ -1625,14 +1670,238 @@ async def update_task_comment(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to update this comment",
         )
-    await add_log(
-        action=ActivityAction.COMMENT_CREATED,
+    add_log(
+        action=ActivityAction.COMMENT_UPDATED,
         description=f"Old Comment '{comment.content}' updated to '{model_comment.content}' ",
         db=db,
         current_user=current_user,
         task_id=task_id,
     )
+    old_username_mentions = find_mentions(comment.content)
+    new_username_mentions = find_mentions(model_comment.content)
+
+    added_mentions = new_username_mentions - old_username_mentions
+    removed_mentions = old_username_mentions - new_username_mentions
     comment.content = model_comment.content
+    if added_mentions:
+        result = await db.scalars(
+            select(User.id).where(
+                User.username.in_(added_mentions),
+                User.is_active.is_(True),
+                User.id != current_user.id,
+            )
+        )
+        user_ids = result.all()
+        if user_ids:
+            result = await db.execute(
+                select(ProjectMembers.role, ProjectMembers.user_id).where(
+                    ProjectMembers.project_id == task.project_id,
+                    ProjectMembers.user_id.in_(user_ids),
+                )
+            )
+            project_users = result.all()
+            assignee_result = await db.scalars(
+                select(TaskAssignee.user_id).where(
+                    TaskAssignee.task_id == task.id,
+                    TaskAssignee.user_id.in_(user_ids),
+                )
+            )
+
+            assignee_ids = set(assignee_result.all())
+            for role, user_id in project_users:
+                if (
+                    role not in (ProjectRole.OWNER, ProjectRole.MANAGER)
+                    and user_id not in assignee_ids
+                ):
+                    continue
+
+                notification = Notification(
+                    creator_id=current_user.id,
+                    user_id=user_id,
+                    type=NotificationType.MENTION,
+                    title=f"User {current_user.username} mentioned you",
+                    message=model_comment.content,
+                    project_id=task.project_id,
+                    task_id=task.id,
+                    comment_id=comment.id,
+                )
+                db.add(notification)
+
+                mention = CommentMention(
+                    user_id=user_id,
+                    comment_id=comment.id,
+                )
+                db.add(mention)
+    if removed_mentions:
+        result = await db.scalars(
+            select(User.id).where(User.username.in_(removed_mentions))
+        )
+        removed_user_ids = result.all()
+
+        if removed_user_ids:
+            result = await db.scalars(
+                select(CommentMention).where(
+                    CommentMention.comment_id == comment.id,
+                    CommentMention.user_id.in_(removed_user_ids),
+                )
+            )
+            mentions = result.all()
+
+            for mention in mentions:
+                await db.delete(mention)
 
     await db.commit()
     return {"message": "update comment successfully"}
+
+
+##########task Mention##########
+
+
+async def notification_update_read(
+    current_user: GetUser,
+    db: Database,
+    notification_id: int,
+):
+    notification = await db.scalar(
+        select(Notification).where(
+            Notification.id == notification_id, Notification.user_id == current_user.id
+        )
+    )
+    if notification is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="notification not found"
+        )
+    notification.is_read = True
+    await db.commit()
+    return {"message": "notification marked as read"}
+
+
+async def notification_read_all(
+    current_user: GetUser,
+    db: Database,
+):
+    notifications = await db.scalars(
+        select(Notification).where(
+            Notification.user_id == current_user.id,
+            Notification.is_read.is_(False),
+        )
+    )
+
+    for notification in notifications:
+        notification.is_read = True
+
+    await db.commit()
+    return {"message": "notification marked as read"}
+
+
+async def notification_delete(
+    current_user: GetUser,
+    db: Database,
+    notification_id: int,
+):
+    notification = await db.scalar(
+        select(Notification).where(
+            Notification.id == notification_id,
+            Notification.user_id == current_user.id,
+        )
+    )
+    if notification is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="notification not found"
+        )
+    await db.delete(notification)
+    await db.commit()
+    return {"message": "notification successfully deleted"}
+
+
+async def get_notification_by_id(
+    current_user: GetUser,
+    db: Database,
+    notification_id: int,
+):
+    notification = await db.scalar(
+        select(Notification).where(
+            Notification.id == notification_id,
+            Notification.user_id == current_user.id,
+        )
+    )
+
+    if notification is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="notification not found"
+        )
+    return notification
+
+
+async def get_all_notification(
+    current_user: GetUser,
+    db: Database,
+):
+    result = await db.scalars(
+        select(Notification)
+        .where(Notification.user_id == current_user.id)
+        .order_by(Notification.created_at.desc())
+    )
+    notification = result.all()
+    return notification
+
+
+async def get_all_unread_notification(
+    current_user: GetUser,
+    db: Database,
+):
+    result = await db.scalars(
+        select(Notification)
+        .where(Notification.user_id == current_user.id, Notification.is_read.is_(False))
+        .order_by(Notification.created_at.desc())
+    )
+    notification = result.all()
+    return notification
+
+
+async def get_notification_by_project_id(
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+):
+    result = await db.scalars(
+        select(Notification)
+        .where(
+            Notification.project_id == project_id,
+            Notification.user_id == current_user.id,
+        )
+        .order_by(Notification.created_at.desc())
+    )
+    notification = result.all()
+    return notification
+
+
+async def get_notification_by_task_id(
+    current_user: GetUser,
+    db: Database,
+    task_id: int,
+):
+    result = await db.scalars(
+        select(Notification)
+        .where(Notification.task_id == task_id, Notification.user_id == current_user.id)
+        .order_by(Notification.created_at.desc())
+    )
+    notification = result.all()
+    return notification
+
+
+async def get_notification_by_comment_id(
+    current_user: GetUser,
+    db: Database,
+    comment_id: int,
+):
+    result = await db.scalars(
+        select(Notification)
+        .where(
+            Notification.comment_id == comment_id,
+            Notification.user_id == current_user.id,
+        )
+        .order_by(Notification.created_at.desc())
+    )
+    notification = result.all()
+    return notification

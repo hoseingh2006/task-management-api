@@ -28,7 +28,7 @@ async def create_project(
         project_id=project_id, user_id=user_id, role=ProjectRole.OWNER
     )
     db.add(project_ember)
-    await add_log(
+    add_log(
         action=ActivityAction.PROJECT_CREATED,
         description=f"Project '{project_model.name}' was created",
         db=db,
@@ -95,7 +95,7 @@ async def update_project(
         project.name = project_model.name
     if project_model.description:
         project.description = project_model.description
-    await add_log(
+    add_log(
         action=ActivityAction.PROJECT_UPDATED,
         description=f"Project '{project.name}' was Updated",
         db=db,
@@ -126,7 +126,7 @@ async def delete_project(current_user: GetUser, db: Database, project_id: int):
         )
     project.is_active = False
     project.status = ProjectStatus.ARCHIVED
-    await add_log(
+    add_log(
         action=ActivityAction.PROJECT_DELETED,
         description=f"Project '{project.name}' was Deleted",
         db=db,
@@ -159,7 +159,7 @@ async def update_project_status(
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="project not found!")
     project.status = status_model.status
-    await add_log(
+    add_log(
         action=ActivityAction.PROJECT_STATUS_CHANGED,
         description=f"Project '{project.name}' Status was Changed",
         db=db,
@@ -234,7 +234,7 @@ async def project_member(
     )
 
     db.add(project_member)
-    await add_log(
+    add_log(
         action=ActivityAction.MEMBER_ADDED,
         description=f"Project '{project_id}' was Add Member",
         db=db,
@@ -278,7 +278,7 @@ async def project_update_member(
     if member is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not Found Project")
     member.role = member_model.role
-    await add_log(
+    add_log(
         action=ActivityAction.MEMBER_ROLE_CHANGED,
         description=f"Project '{project_id}' was Member Role Change to '{member.role}' ",
         db=db,
@@ -326,7 +326,7 @@ async def project_delete_member(
             detail="Project owner cannot be removed.",
         )
     await db.delete(member)
-    await add_log(
+    add_log(
         action=ActivityAction.MEMBER_REMOVED,
         description=f"Project '{project_id}' was Member Deleted '{user_id}' ",
         db=db,

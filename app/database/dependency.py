@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Annotated
@@ -175,7 +176,7 @@ class ActivityAction(StrEnum):
     DEPENDENCY_REMOVED = "dependency_removed"
 
 
-async def add_log(
+def add_log(
     action: ActivityAction,
     description: str,
     db: Database,
@@ -203,3 +204,9 @@ async def add_log(
         )
 
     db.add(activity)
+
+
+##########mentions comment##########
+def find_mentions(text):
+    pattern = r"@([A-Za-z0-9_]+)"
+    return set(re.findall(pattern, text))
