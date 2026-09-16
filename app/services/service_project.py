@@ -1,5 +1,6 @@
 from fastapi import HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.sql.elements import ColumnElement
 from starlette import status
 
 from app.database.dependency import (
@@ -61,33 +62,64 @@ async def create_project(
     return {"message": "Project created successfully!"}
 
 
-async def get_project(current_user: GetUser, db: Database, page: int, page_size: int):
-    total = await db.scalar(
+async def get_project(
+    current_user: GetUser,
+    db: Database,
+    page: int,
+    page_size: int,
+    status: ProjectStatus | None = None,
+    sort_by: str = "id",
+    sort_order: str = "asc",
+):
+    conditions: list[ColumnElement[bool]] = [
+        ProjectMembers.user_id == current_user.id,
+        Project.is_active.is_(True),
+    ]
+
+    if status is not None:
+        conditions.append(Project.status == status)
+
+    query = (
+        select(Project)
+        .where(*conditions)
+        .join(ProjectMembers, Project.id == ProjectMembers.project_id)
+    )
+
+    sort_columns = {
+        "id": Project.id,
+        "name": Project.name,
+        "updated_at": Project.updated_at,
+    }
+    sort_column = sort_columns.get(sort_by, Project.id)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
+            Project.id.desc(),
+        )
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            Project.id.asc(),
+        )
+    count_query = (
         select(func.count())
         .select_from(Project)
+        .where(*conditions)
         .join(ProjectMembers, Project.id == ProjectMembers.project_id)
-        .where(
-            ProjectMembers.user_id == current_user.id,
-            Project.is_active.is_(True),
-        )
     )
-    projects = await db.scalars(
-        select(Project)
-        .join(ProjectMembers, Project.id == ProjectMembers.project_id)
-        .where(
-            ProjectMembers.user_id == current_user.id,
-            Project.is_active.is_(True),
-        )
-        .order_by(Project.id)
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
+
+    total = await db.scalar(count_query) or 0
+    result = await db.scalars(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
     )
+    projects = result.all()
     return {
-        "items": projects.all(),
+        "items": projects,
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }
 
 
@@ -445,40 +477,71 @@ async def project_delete_member(
 
 
 async def get_project_members(
-    current_user: GetUser, db: Database, project_id: int, page: int, page_size: int
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    page: int,
+    page_size: int,
+    role: ProjectRole | None = None,
+    sort_by: str = "id",
+    sort_order: str = "asc",
 ):
-    result_member = await db.scalars(
-        select(ProjectMembers).where(
-            ProjectMembers.project_id == project_id,
-            ProjectMembers.user_id == current_user.id,
-        )
-    )
-    member = result_member.first()
-    if member is None:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail="You are not a member of this project.",
-        )
-    total = await db.scalar(
-        select(func.count())
-        .select_from(ProjectMembers)
-        .where(
-            ProjectMembers.project_id == project_id,
-        )
+    member_query = select(ProjectMembers.id).where(
+        ProjectMembers.project_id == project_id,
+        ProjectMembers.user_id == current_user.id,
     )
 
-    result = await db.execute(
+    member_id = await db.scalar(member_query)
+
+    if member_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this project.",
+        )
+    conditions: list[ColumnElement[bool]] = [
+        ProjectMembers.project_id == project_id,
+        Project.is_active.is_(True),
+    ]
+
+    if role is not None:
+        conditions.append(ProjectMembers.role == role)
+
+    query = (
         select(User.username, ProjectMembers.role)
         .join(User, ProjectMembers.user_id == User.id)
         .join(Project, ProjectMembers.project_id == Project.id)
-        .where(
-            ProjectMembers.project_id == project_id,
-            Project.is_active.is_(True),
-        )
-        .order_by(User.id)
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
+        .where(*conditions)
     )
+
+    sort_columns = {
+        "id": ProjectMembers.id,
+        "user_id": ProjectMembers.user_id,
+        "username": User.username,
+    }
+    sort_column = sort_columns.get(sort_by, ProjectMembers.id)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
+            ProjectMembers.id.desc(),
+        )
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            ProjectMembers.id.asc(),
+        )
+    count_query = (
+        select(func.count())
+        .select_from(ProjectMembers)
+        .join(Project, ProjectMembers.project_id == Project.id)
+        .where(*conditions)
+    )
+
+    total = await db.scalar(count_query) or 0
+    result = await db.execute(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
+    )
+
     list_users = [
         {
             "username": username,
@@ -486,11 +549,10 @@ async def get_project_members(
         }
         for username, role in result.all()
     ]
-
     return {
         "items": list_users,
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }

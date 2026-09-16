@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 from starlette import status
 
 from app.database.dependency import (
@@ -26,6 +27,7 @@ from app.models.model_task import (
     TaskAssignee,
     TaskDependency,
     TaskLabel,
+    TaskPriority,
 )
 from app.models.model_user import User
 from app.schemas.schema_task import (
@@ -229,9 +231,16 @@ async def create_task(
 
 
 async def get_tasks(
-    current_user: GetUser, db: Database, project_id: int, page: int, page_size: int
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    page: int,
+    page_size: int,
+    task_status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+    sort_by: str = "id",
+    sort_order: str = "asc",
 ):
-
     project_result = await db.execute(
         select(Project.id, ProjectMembers.role)
         .join(ProjectMembers, Project.id == ProjectMembers.project_id)
@@ -244,60 +253,69 @@ async def get_tasks(
     project = project_result.first()
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found project")
-    if project.role in (ProjectRole.OWNER, ProjectRole.MANAGER):
-        total = await db.scalar(
+    can_view_all_tasks = project.role in (ProjectRole.OWNER, ProjectRole.MANAGER)
+    if can_view_all_tasks:
+        conditions = [
+            Task.project_id == project.id,
+            Task.is_active.is_(True),
+        ]
+    else:
+        conditions = [
+            Task.project_id == project_id,
+            TaskAssignee.user_id == current_user.id,
+            Task.is_active.is_(True),
+        ]
+    if task_status is not None:
+        conditions.append(Task.status == task_status)
+    if priority is not None:
+        conditions.append(Task.priority == priority)
+    if can_view_all_tasks:
+        query = select(Task).where(*conditions)
+        count_query = select(func.count()).select_from(Task).where(*conditions)
+    else:
+        query = (
+            select(Task)
+            .join(TaskAssignee, Task.id == TaskAssignee.task_id)
+            .where(*conditions)
+        )
+        count_query = (
             select(func.count())
             .select_from(Task)
-            .where(
-                Task.project_id == project.id,
-                Task.is_active.is_(True),
-            )
+            .join(TaskAssignee, Task.id == TaskAssignee.task_id)
+            .where(*conditions)
         )
-        tasks = await db.scalars(
-            select(Task)
-            .where(
-                Task.project_id == project.id,
-                Task.is_active.is_(True),
-            )
-            .order_by(Task.id)
-            .offset(calculate_offset(page, page_size))
-            .limit(page_size)
+    sort_columns = {
+        "id": Task.id,
+        "project_id": Task.project_id,
+        "due_date": Task.due_date,
+        "creator_id": Task.creator_id,
+        "title": Task.title,
+    }
+    sort_column = sort_columns.get(sort_by, Task.id)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
+            Task.id.desc(),
         )
-        return {
-            "items": tasks.all(),
-            "page": page,
-            "page_size": page_size,
-            "total": total,
-            "pages": calculate_pages(total, page_size),  # type: ignore
-        }
-    total = await db.scalar(
-        select(func.count())
-        .select_from(Task)
-        .join(TaskAssignee, Task.id == TaskAssignee.task_id)
-        .where(
-            Task.project_id == project_id,
-            TaskAssignee.user_id == current_user.id,
-            Task.is_active.is_(True),
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            Task.id.asc(),
         )
+
+    total = await db.scalar(count_query) or 0
+
+    result = await db.scalars(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
     )
-    user_task = await db.scalars(
-        select(Task)
-        .join(TaskAssignee, Task.id == TaskAssignee.task_id)
-        .where(
-            Task.project_id == project_id,
-            TaskAssignee.user_id == current_user.id,
-            Task.is_active.is_(True),
-        )
-        .order_by(Task.id)
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
-    )
+    tasks = result.all()
     return {
-        "items": user_task.all(),
+        "items": tasks,
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }
 
 
@@ -830,12 +848,21 @@ async def delete_tag(
 
 
 async def select_all_project_tag(
-    db: Database, current_user: GetUser, project_id: int, page: int, page_size: int
+    db: Database,
+    current_user: GetUser,
+    project_id: int,
+    page: int,
+    page_size: int,
+    sort_by: str = "id",
+    sort_order: str = "asc",
 ):
     project_member_result = await db.scalars(
-        select(ProjectMembers).where(
+        select(ProjectMembers)
+        .join(Project, ProjectMembers.project_id == Project.id)
+        .where(
             ProjectMembers.project_id == project_id,
             ProjectMembers.user_id == current_user.id,
+            Project.is_active.is_(True),
         )
     )
     project_member = project_member_result.first()
@@ -844,41 +871,46 @@ async def select_all_project_tag(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not a member of this project",
         )
-    total = await db.scalar(
-        select(func.count())
-        .select_from(Tag)
-        .where(
-            or_(
-                Tag.project_id == project_id,
-                Tag.scope == TagScope.GLOBAL,
-            )
+    conditions = [
+        or_(
+            Tag.project_id == project_id,
+            Tag.scope == TagScope.GLOBAL,
         )
-    )
-    tag_result = await db.scalars(
-        select(Tag)
-        .where(
-            or_(
-                Tag.project_id == project_id,
-                Tag.scope == TagScope.GLOBAL,
-            )
-        )
-        .order_by(Tag.id)
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
-    )
-    tags = tag_result.all()
-    if not tags:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tag not found in this project",
-        )
+    ]
 
+    query = select(Tag).where(*conditions)
+
+    sort_columns = {
+        "id": Tag.id,
+        "project_id": Tag.project_id,
+        "name": Tag.name,
+    }
+    sort_column = sort_columns.get(sort_by, Tag.id)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
+            Tag.id.desc(),
+        )
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            Tag.id.asc(),
+        )
+    count_query = select(func.count()).select_from(Tag).where(*conditions)
+
+    total = await db.scalar(count_query) or 0
+
+    result = await db.scalars(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
+    )
+    tags = result.all()
     return {
         "items": tags,
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }
 
 
@@ -1183,6 +1215,10 @@ async def get_subtask_with_task(
     task_id: int,
     page: int,
     page_size: int,
+    task_status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+    sort_by: str = "id",
+    sort_order: str = "asc",
 ):
     project_result = await db.execute(
         select(Project.id, ProjectMembers.role)
@@ -1194,27 +1230,75 @@ async def get_subtask_with_task(
         )
     )
     project = project_result.first()
+
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Project not found")
-    total = await db.scalar(
-        select(func.count())
-        .select_from(Task)
-        .where(
+    project_role = project.role
+    parent_task = await db.scalar(
+        select(Task.id).where(
+            Task.id == task_id,
             Task.project_id == project_id,
             Task.is_active.is_(True),
-            Task.parent_task_id == task_id,
         )
     )
-    result = await db.scalars(
-        select(Task)
-        .where(
-            Task.project_id == project_id,
-            Task.is_active.is_(True),
-            Task.parent_task_id == task_id,
+
+    if parent_task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
         )
-        .order_by(Task.id)
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
+    conditions: list[ColumnElement[bool]] = [
+        Task.project_id == project_id,
+        Task.is_active.is_(True),
+        Task.parent_task_id == task_id,
+    ]
+
+    if task_status is not None:
+        conditions.append(Task.status == task_status)
+    if priority is not None:
+        conditions.append(Task.priority == priority)
+    if project_role in (ProjectRole.OWNER, ProjectRole.MANAGER):
+        query = select(Task).where(*conditions)
+        count_query = select(func.count()).select_from(Task).where(*conditions)
+    else:
+        conditions.append(
+            TaskAssignee.user_id == current_user.id,
+        )
+        query = (
+            select(Task)
+            .join(TaskAssignee, Task.id == TaskAssignee.task_id)
+            .where(*conditions)
+        )
+        count_query = (
+            select(func.count())
+            .select_from(Task)
+            .join(TaskAssignee, Task.id == TaskAssignee.task_id)
+            .where(*conditions)
+        )
+
+    sort_columns = {
+        "id": Task.id,
+        "due_date": Task.due_date,
+        "creator_id": Task.creator_id,
+        "title": Task.title,
+    }
+    sort_column = sort_columns.get(sort_by, Task.id)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
+            Task.id.desc(),
+        )
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            Task.id.asc(),
+        )
+
+    total = await db.scalar(count_query) or 0
+
+    result = await db.scalars(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
     )
     tasks = result.all()
     return {
@@ -1222,7 +1306,7 @@ async def get_subtask_with_task(
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }
 
 
@@ -1459,6 +1543,10 @@ async def get_task_dependency(
     task_id: int,
     page: int,
     page_size: int,
+    task_status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+    sort_by: str = "id",
+    sort_order: str = "asc",
 ):
     project_result = await db.execute(
         select(Project.id, ProjectMembers.role)
@@ -1498,35 +1586,62 @@ async def get_task_dependency(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to view this task",
             )
-    total = await db.scalar(
-        select(func.count())
-        .select_from(Task)
-        .join(TaskDependency, TaskDependency.depends_on_task_id == Task.id)
-        .where(
-            TaskDependency.task_id == task_id,
-            TaskDependency.task_id == task_id,
-            Task.is_active.is_(True),
-        )
-    )
-    result = await db.scalars(
+    conditions: list[ColumnElement[bool]] = [
+        TaskDependency.task_id == task_id,
+        Task.is_active.is_(True),
+    ]
+
+    if task_status is not None:
+        conditions.append(Task.status == task_status)
+    if priority is not None:
+        conditions.append(Task.priority == priority)
+
+    query = (
         select(Task)
         .join(TaskDependency, TaskDependency.depends_on_task_id == Task.id)
-        .where(
-            TaskDependency.task_id == task_id,
-            TaskDependency.task_id == task_id,
-            Task.is_active.is_(True),
-        )
-        .order_by(Task.id)
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
+        .where(*conditions)
     )
 
+    sort_columns = {
+        "id": Task.id,
+        "due_date": Task.due_date,
+        "creator_id": Task.creator_id,
+        "title": Task.title,
+    }
+    sort_column = sort_columns.get(sort_by, Task.id)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
+            Task.id.desc(),
+        )
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            Task.id.asc(),
+        )
+    count_query = (
+        select(func.count())
+        .select_from(Task)
+        .join(
+            TaskDependency,
+            TaskDependency.depends_on_task_id == Task.id,
+        )
+        .where(*conditions)
+    )
+
+    total = await db.scalar(count_query) or 0
+
+    result = await db.scalars(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
+    )
+    tasks = result.all()
     return {
-        "items": result.all(),
+        "items": tasks,
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }
 
 
@@ -1695,6 +1810,8 @@ async def get_task_comments(
     task_id: int,
     page: int,
     page_size: int,
+    sort_by: str = "id",
+    sort_order: str = "asc",
 ):
     task = await db.scalar(
         select(Task).where(Task.id == task_id, Task.is_active.is_(True))
@@ -1725,30 +1842,46 @@ async def get_task_comments(
         if task_assignee is None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to comment on this task",
+                detail="You don't have permission to view comments on this task",
             )
-    total = await db.scalar(
-        select(func.count())
-        .select_from(Comment)
-        .where(
-            Comment.task_id == task_id,
+    conditions: list[ColumnElement[bool]] = [
+        Comment.task_id == task_id,
+    ]
+
+    query = select(Comment).where(*conditions)
+
+    sort_columns = {
+        "id": Comment.id,
+        "creator_id": Comment.creator_id,
+        "updated_at": Comment.updated_at,
+        "created_at": Comment.created_at,
+    }
+    sort_column = sort_columns.get(sort_by, Comment.updated_at)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
+            Comment.id.desc(),
         )
-    )
-    comments = await db.scalars(
-        select(Comment)
-        .where(
-            Comment.task_id == task_id,
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            Comment.id.asc(),
         )
-        .order_by(Comment.created_at.desc())
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
+    count_query = select(func.count()).select_from(Comment).where(*conditions)
+
+    total = await db.scalar(count_query) or 0
+
+    result = await db.scalars(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
     )
+    comments = result.all()
     return {
-        "items": comments.all(),
+        "items": comments,
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }
 
 
@@ -1994,6 +2127,7 @@ async def get_notification_by_id(
     db: Database,
     notification_id: int,
 ):
+
     notification = await db.scalar(
         select(Notification).where(
             Notification.id == notification_id,
@@ -2013,29 +2147,51 @@ async def get_all_notification(
     db: Database,
     page: int,
     page_size: int,
+    notification_type: NotificationType | None = None,
+    sort_by: str = "id",
+    sort_order: str = "asc",
 ):
-    total = await db.scalar(
-        select(func.count())
-        .select_from(Notification)
-        .where(Notification.user_id == current_user.id)
-    )
-    result = await db.scalars(
-        select(Notification)
-        .where(Notification.user_id == current_user.id)
-        .order_by(
-            Notification.created_at.desc(),
+    conditions: list[ColumnElement[bool]] = [Notification.user_id == current_user.id]
+
+    if notification_type is not None:
+        conditions.append(Notification.type == notification_type)
+
+    query = select(Notification).where(*conditions)
+
+    sort_columns = {
+        "id": Notification.id,
+        "task_id": Notification.task_id,
+        "project_id": Notification.project_id,
+        "created_at": Notification.created_at,
+        "comment_id": Notification.comment_id,
+        "is_read": Notification.is_read,
+    }
+    sort_column = sort_columns.get(sort_by, Notification.created_at)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
             Notification.id.desc(),
         )
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            Notification.id.asc(),
+        )
+    count_query = select(func.count()).select_from(Notification).where(*conditions)
+
+    total = await db.scalar(count_query) or 0
+
+    result = await db.scalars(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
     )
-    notification = result.all()
+    notifications = result.all()
     return {
-        "items": notification,
+        "items": notifications,
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }
 
 
@@ -2044,29 +2200,53 @@ async def get_all_unread_notification(
     db: Database,
     page: int,
     page_size: int,
+    notification_type: NotificationType | None = None,
+    sort_by: str = "id",
+    sort_order: str = "asc",
 ):
-    total = await db.scalar(
-        select(func.count())
-        .select_from(Notification)
-        .where(Notification.user_id == current_user.id, Notification.is_read.is_(False))
-    )
-    result = await db.scalars(
-        select(Notification)
-        .where(Notification.user_id == current_user.id, Notification.is_read.is_(False))
-        .order_by(
-            Notification.created_at.desc(),
+    conditions: list[ColumnElement[bool]] = [
+        Notification.user_id == current_user.id,
+        Notification.is_read.is_(False),
+    ]
+
+    if notification_type is not None:
+        conditions.append(Notification.type == notification_type)
+
+    query = select(Notification).where(*conditions)
+
+    sort_columns = {
+        "id": Notification.id,
+        "task_id": Notification.task_id,
+        "project_id": Notification.project_id,
+        "created_at": Notification.created_at,
+        "comment_id": Notification.comment_id,
+    }
+    sort_column = sort_columns.get(sort_by, Notification.created_at)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
             Notification.id.desc(),
         )
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            Notification.id.asc(),
+        )
+    count_query = select(func.count()).select_from(Notification).where(*conditions)
+
+    total = await db.scalar(count_query) or 0
+
+    result = await db.scalars(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
     )
-    notification = result.all()
+    notifications = result.all()
     return {
-        "items": notification,
+        "items": notifications,
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }
 
 
@@ -2076,35 +2256,53 @@ async def get_notification_by_project_id(
     project_id: int,
     page: int,
     page_size: int,
+    notification_type: NotificationType | None = None,
+    sort_by: str = "id",
+    sort_order: str = "asc",
 ):
-    total = await db.scalar(
-        select(func.count())
-        .select_from(Notification)
-        .where(
-            Notification.project_id == project_id,
-            Notification.user_id == current_user.id,
-        )
-    )
-    result = await db.scalars(
-        select(Notification)
-        .where(
-            Notification.project_id == project_id,
-            Notification.user_id == current_user.id,
-        )
-        .order_by(
-            Notification.created_at.desc(),
+    conditions: list[ColumnElement[bool]] = [
+        Notification.project_id == project_id,
+        Notification.user_id == current_user.id,
+    ]
+
+    if notification_type is not None:
+        conditions.append(Notification.type == notification_type)
+
+    query = select(Notification).where(*conditions)
+
+    sort_columns = {
+        "id": Notification.id,
+        "task_id": Notification.task_id,
+        "created_at": Notification.created_at,
+        "comment_id": Notification.comment_id,
+        "is_read": Notification.is_read,
+    }
+    sort_column = sort_columns.get(sort_by, Notification.created_at)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
             Notification.id.desc(),
         )
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            Notification.id.asc(),
+        )
+    count_query = select(func.count()).select_from(Notification).where(*conditions)
+
+    total = await db.scalar(count_query) or 0
+
+    result = await db.scalars(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
     )
-    notification = result.all()
+    notifications = result.all()
     return {
-        "items": notification,
+        "items": notifications,
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }
 
 
@@ -2114,29 +2312,53 @@ async def get_notification_by_task_id(
     task_id: int,
     page: int,
     page_size: int,
+    notification_type: NotificationType | None = None,
+    sort_by: str = "id",
+    sort_order: str = "asc",
 ):
-    total = await db.scalar(
-        select(func.count())
-        .select_from(Notification)
-        .where(Notification.task_id == task_id, Notification.user_id == current_user.id)
-    )
-    result = await db.scalars(
-        select(Notification)
-        .where(Notification.task_id == task_id, Notification.user_id == current_user.id)
-        .order_by(
-            Notification.created_at.desc(),
+    conditions: list[ColumnElement[bool]] = [
+        Notification.task_id == task_id,
+        Notification.user_id == current_user.id,
+    ]
+
+    if notification_type is not None:
+        conditions.append(Notification.type == notification_type)
+
+    query = select(Notification).where(*conditions)
+
+    sort_columns = {
+        "id": Notification.id,
+        "project_id": Notification.project_id,
+        "created_at": Notification.created_at,
+        "comment_id": Notification.comment_id,
+        "is_read": Notification.is_read,
+    }
+    sort_column = sort_columns.get(sort_by, Notification.created_at)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
             Notification.id.desc(),
         )
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            Notification.id.asc(),
+        )
+    count_query = select(func.count()).select_from(Notification).where(*conditions)
+
+    total = await db.scalar(count_query) or 0
+
+    result = await db.scalars(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
     )
-    notification = result.all()
+    notifications = result.all()
     return {
-        "items": notification,
+        "items": notifications,
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }
 
 
@@ -2146,33 +2368,51 @@ async def get_notification_by_comment_id(
     comment_id: int,
     page: int,
     page_size: int,
+    notification_type: NotificationType | None = None,
+    sort_by: str = "id",
+    sort_order: str = "asc",
 ):
-    total = await db.scalar(
-        select(func.count())
-        .select_from(Notification)
-        .where(
-            Notification.comment_id == comment_id,
-            Notification.user_id == current_user.id,
-        )
-    )
-    result = await db.scalars(
-        select(Notification)
-        .where(
-            Notification.comment_id == comment_id,
-            Notification.user_id == current_user.id,
-        )
-        .order_by(
-            Notification.created_at.desc(),
+    conditions: list[ColumnElement[bool]] = [
+        Notification.comment_id == comment_id,
+        Notification.user_id == current_user.id,
+    ]
+
+    if notification_type is not None:
+        conditions.append(Notification.type == notification_type)
+
+    query = select(Notification).where(*conditions)
+
+    sort_columns = {
+        "id": Notification.id,
+        "task_id": Notification.task_id,
+        "project_id": Notification.project_id,
+        "created_at": Notification.created_at,
+        "is_read": Notification.is_read,
+    }
+    sort_column = sort_columns.get(sort_by, Notification.created_at)
+
+    if sort_order == "desc":
+        query = query.order_by(
+            sort_column.desc(),
             Notification.id.desc(),
         )
-        .offset(calculate_offset(page, page_size))
-        .limit(page_size)
+    else:
+        query = query.order_by(
+            sort_column.asc(),
+            Notification.id.asc(),
+        )
+    count_query = select(func.count()).select_from(Notification).where(*conditions)
+
+    total = await db.scalar(count_query) or 0
+
+    result = await db.scalars(
+        query.offset(calculate_offset(page, page_size)).limit(page_size)
     )
-    notification = result.all()
+    notifications = result.all()
     return {
-        "items": notification,
+        "items": notifications,
         "page": page,
         "page_size": page_size,
         "total": total,
-        "pages": calculate_pages(total, page_size),  # type: ignore
+        "pages": calculate_pages(total, page_size),
     }

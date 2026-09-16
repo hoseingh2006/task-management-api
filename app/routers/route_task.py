@@ -2,12 +2,15 @@ from fastapi import APIRouter, Query
 from starlette import status
 
 from app.database.dependency import Database, GetUser
+from app.models.model_task import NotificationType
 from app.schemas.schema_task import (
     CommentModel,
     TagProjectModel,
     TagTaskModel,
     TaskDependencyDelete,
     TaskModel,
+    TaskPriority,
+    TaskStatus,
     TaskStatusUpdateModel,
     TaskUpdateModel,
 )
@@ -33,6 +36,10 @@ async def get_tasks(
     db: Database,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    task_status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_task.get_tasks(
         current_user=current_user,
@@ -40,6 +47,10 @@ async def get_tasks(
         db=db,
         page=page,
         page_size=page_size,
+        task_status=task_status,
+        priority=priority,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -137,6 +148,8 @@ async def get_all_project_tag(
     db: Database,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_task.select_all_project_tag(
         current_user=current_user,
@@ -144,6 +157,8 @@ async def get_all_project_tag(
         db=db,
         page=page,
         page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -206,6 +221,10 @@ async def get_subtask_with_task(
     task_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    task_status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_task.get_subtask_with_task(
         current_user=current_user,
@@ -214,6 +233,10 @@ async def get_subtask_with_task(
         task_id=task_id,
         page=page,
         page_size=page_size,
+        task_status=task_status,
+        priority=priority,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -262,6 +285,10 @@ async def get_task_dependency_by_id(
     task_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
+    task_status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
 ):
     return await service_task.get_task_dependency(
         current_user=current_user,
@@ -270,6 +297,10 @@ async def get_task_dependency_by_id(
         task_id=task_id,
         page=page,
         page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        task_status=task_status,
+        priority=priority,
     )
 
 
@@ -313,6 +344,8 @@ async def get_task_comments(
     current_user: GetUser,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_task.get_task_comments(
         db=db,
@@ -320,6 +353,8 @@ async def get_task_comments(
         current_user=current_user,
         page=page,
         page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -367,9 +402,18 @@ async def get_all_notification(
     current_user: GetUser,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    notification_type: NotificationType | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_task.get_all_notification(
-        db=db, current_user=current_user, page=page, page_size=page_size
+        db=db,
+        current_user=current_user,
+        page=page,
+        page_size=page_size,
+        notification_type=notification_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -379,9 +423,18 @@ async def get_all_unread_notification(
     current_user: GetUser,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    notification_type: NotificationType | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_task.get_all_unread_notification(
-        db=db, current_user=current_user, page_size=page_size, page=page
+        db=db,
+        current_user=current_user,
+        page_size=page_size,
+        page=page,
+        notification_type=notification_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -392,6 +445,9 @@ async def get_notification_by_project_id(
     current_user: GetUser,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    notification_type: NotificationType | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_task.get_notification_by_project_id(
         db=db,
@@ -399,6 +455,9 @@ async def get_notification_by_project_id(
         project_id=project_id,
         page_size=page_size,
         page=page,
+        notification_type=notification_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -409,6 +468,9 @@ async def get_notification_by_task_id(
     current_user: GetUser,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    notification_type: NotificationType | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_task.get_notification_by_task_id(
         db=db,
@@ -416,6 +478,9 @@ async def get_notification_by_task_id(
         task_id=task_id,
         page_size=page_size,
         page=page,
+        notification_type=notification_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -426,6 +491,9 @@ async def get_notification_by_comment_id(
     current_user: GetUser,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    notification_type: NotificationType | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_task.get_notification_by_comment_id(
         db=db,
@@ -433,6 +501,9 @@ async def get_notification_by_comment_id(
         comment_id=comment_id,
         page_size=page_size,
         page=page,
+        notification_type=notification_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -463,7 +534,15 @@ async def get_notification_by_id(
     db: Database,
     notification_id: int,
     current_user: GetUser,
+    notification_type: NotificationType | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_task.get_notification_by_id(
-        db=db, current_user=current_user, notification_id=notification_id
+        db=db,
+        current_user=current_user,
+        notification_id=notification_id,
+        notification_type=notification_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )

@@ -2,8 +2,11 @@ from fastapi import APIRouter, Query
 from starlette import status
 
 from app.database.dependency import Database, GetAdmin
+from app.models.model_project import ProjectStatus
+from app.models.model_task import TagScope, TaskPriority, TaskStatus
 from app.schemas.schema_admin import (
     TagModel,
+    UserRole,
     UserUpdateAdminModel,
     UserUpdateAdminPasswordModel,
 )
@@ -19,8 +22,20 @@ async def get_users(
     db: Database,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    role: UserRole | None = None,
+    is_active: bool | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
-    return await service_admin.get_user(db=db, page=page, page_size=page_size)
+    return await service_admin.get_user(
+        db=db,
+        page=page,
+        page_size=page_size,
+        role=role,
+        is_active=is_active,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
 
 
 @route.get("/users/{user_id}", status_code=status.HTTP_200_OK)
@@ -64,8 +79,20 @@ async def get_projects(
     db: Database,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    status: ProjectStatus | None = None,
+    is_active: bool | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
-    return await service_admin.get_projects(db=db, page=page, page_size=page_size)
+    return await service_admin.get_projects(
+        db=db,
+        page=page,
+        page_size=page_size,
+        status=status,
+        is_active=is_active,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
 
 
 @route.get("/projects/{project_id}", status_code=status.HTTP_200_OK)
@@ -98,8 +125,22 @@ async def get_tasks(
     db: Database,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+    is_active: bool | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
-    return await service_admin.get_tasks(db=db, page=page, page_size=page_size)
+    return await service_admin.get_tasks(
+        db=db,
+        page=page,
+        page_size=page_size,
+        status=status,
+        is_active=is_active,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        priority=priority,
+    )
 
 
 @route.get("/tasks/{task_id}", status_code=status.HTTP_200_OK)
@@ -130,31 +171,41 @@ async def get_all_tag(
     db: Database,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    scope: TagScope | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
-    return await service_admin.get_all_tag(db=db, page=page, page_size=page_size)
-
-
-@route.get("/tag/project", status_code=status.HTTP_200_OK)
-async def get_all_project_tag(
-    current_user: GetAdmin,
-    db: Database,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, le=100, ge=1),
-):
-
-    return await service_admin.get_all_project_tag(
-        db=db, page=page, page_size=page_size
+    return await service_admin.get_all_tag(
+        db=db,
+        page=page,
+        page_size=page_size,
+        scope=scope,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
-@route.get("/tag/global", status_code=status.HTTP_200_OK)
-async def get_all_global_tag(
-    current_user: GetAdmin,
-    db: Database,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, le=100, ge=1),
-):
-    return await service_admin.get_all_global_tag(db=db, page=page, page_size=page_size)
+# @route.get("/tag/project", status_code=status.HTTP_200_OK)
+# async def get_all_project_tag(
+#     current_user: GetAdmin,
+#     db: Database,
+#     page: int = Query(1, ge=1),
+#     page_size: int = Query(20, le=100, ge=1),
+# ):
+
+#     return await service_admin.get_all_project_tag(
+#         db=db, page=page, page_size=page_size
+#     )
+
+
+# @route.get("/tag/global", status_code=status.HTTP_200_OK)
+# async def get_all_global_tag(
+#     current_user: GetAdmin,
+#     db: Database,
+#     page: int = Query(1, ge=1),
+#     page_size: int = Query(20, le=100, ge=1),
+# ):
+#     return await service_admin.get_all_global_tag(db=db, page=page, page_size=page_size)
 
 
 @route.get("/tag/project/{project_id}", status_code=status.HTTP_200_OK)
@@ -164,9 +215,18 @@ async def get_all_tag_by_project(
     project_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    scope: TagScope | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_admin.get_all_tag_with_project(
-        db=db, project_id=project_id, page_size=page_size, page=page
+        db=db,
+        project_id=project_id,
+        page_size=page_size,
+        page=page,
+        scope=scope,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -191,8 +251,22 @@ async def get_all_subtasks(
     db: Database,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+    is_active: bool | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
-    return await service_admin.get_subtasks(db=db, page=page, page_size=page_size)
+    return await service_admin.get_subtasks(
+        db=db,
+        page=page,
+        page_size=page_size,
+        status=status,
+        is_active=is_active,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        priority=priority,
+    )
 
 
 @route.get("/subtask/{task_id}", status_code=status.HTTP_200_OK)
@@ -207,28 +281,38 @@ async def get_all_log(
     db: Database,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    role: UserRole | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
-    return await service_admin.get_all_log(db=db, page=page, page_size=page_size)
+    return await service_admin.get_all_log(
+        db=db,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        role=role,
+    )
 
 
-@route.get("/logs/user", status_code=status.HTTP_200_OK)
-async def get_all_user_log(
-    current_user: GetAdmin,
-    db: Database,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, le=100, ge=1),
-):
-    return await service_admin.get_all_user_log(db=db, page=page, page_size=page_size)
+# @route.get("/logs/user", status_code=status.HTTP_200_OK)
+# async def get_all_user_log(
+#     current_user: GetAdmin,
+#     db: Database,
+#     page: int = Query(1, ge=1),
+#     page_size: int = Query(20, le=100, ge=1),
+# ):
+#     return await service_admin.get_all_user_log(db=db, page=page, page_size=page_size)
 
 
-@route.get("/logs/admin", status_code=status.HTTP_200_OK)
-async def get_all_admin_log(
-    current_user: GetAdmin,
-    db: Database,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, le=100, ge=1),
-):
-    return await service_admin.get_all_admin_log(db=db, page=page, page_size=page_size)
+# @route.get("/logs/admin", status_code=status.HTTP_200_OK)
+# async def get_all_admin_log(
+#     current_user: GetAdmin,
+#     db: Database,
+#     page: int = Query(1, ge=1),
+#     page_size: int = Query(20, le=100, ge=1),
+# ):
+#     return await service_admin.get_all_admin_log(db=db, page=page, page_size=page_size)
 
 
 @route.get("/logs/user/{user_id}", status_code=status.HTTP_200_OK)
@@ -238,9 +322,16 @@ async def get_log_by_user_id(
     user_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_admin.get_log_by_user_id(
-        db=db, user_id=user_id, page=page, page_size=page_size
+        db=db,
+        user_id=user_id,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -251,9 +342,16 @@ async def get_log_by_task_id(
     task_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_admin.get_log_by_task_id(
-        db=db, task_id=task_id, page=page, page_size=page_size
+        db=db,
+        task_id=task_id,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -264,9 +362,16 @@ async def get_log_by_action(
     action: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_admin.get_log_by_action(
-        db=db, action=action, page=page, page_size=page_size
+        db=db,
+        action=action,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -277,7 +382,14 @@ async def get_log_by_project_id(
     project_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
 ):
     return await service_admin.get_log_by_project_id(
-        db=db, project_id=project_id, page=page, page_size=page_size
+        db=db,
+        project_id=project_id,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
