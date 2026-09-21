@@ -1,8 +1,10 @@
 from fastapi import HTTPException
 from starlette import status
 
+from app.core.enums import ActivityAction
 from app.core.security import Password_hash, verify_pass
-from app.database.dependency import ActivityAction, Database, GetUser, add_log
+from app.core.utilities import add_log
+from app.database.dependency import Database, GetUser
 from app.models.model_user import User
 from app.schemas.schema_user import UpdateUserModel, UserModel, UserPasswordModel
 

@@ -1,14 +1,15 @@
-from app.database.dependency import Database, GetUser  # noqa: I001
 from fastapi import APIRouter, Query
+from starlette import status
+
+from app.database.dependency import Database, GetUser
 from app.schemas.schema_project import (
+    ProjectMember,
     ProjectModel,
     ProjectStatusUpdateModel,
-    ProjectUpdateModel,
-    ProjectMember,
     ProjectUpdateMember,
+    ProjectUpdateModel,
 )
 from app.services import service_project
-from starlette import status
 
 route = APIRouter()
 

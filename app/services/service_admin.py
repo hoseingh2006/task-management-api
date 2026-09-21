@@ -3,20 +3,25 @@ from sqlalchemy import func, select
 from sqlalchemy.sql.elements import ColumnElement
 from starlette import status
 
-from app.core.security import Password_hash
-from app.database.dependency import (
+from app.core.enums import (
     ActivityAction,
-    Database,
-    add_log,
-    calculate_offset,
-    calculate_pages,
+    ProjectRole,
+    ProjectStatus,
+    TagScope,
+    TaskPriority,
+    TaskStatus,
+    UserRole,
 )
-from app.models.model_project import Project, ProjectMembers, ProjectRole, ProjectStatus
-from app.models.model_task import Tag, TagScope, Task, TaskPriority, TaskStatus
+from app.core.security import Password_hash
+from app.core.utilities import add_log, calculate_offset, calculate_pages
+from app.database.dependency import (
+    Database,
+)
+from app.models.model_project import Project, ProjectMembers
+from app.models.model_task import Tag, Task
 from app.models.model_user import ActivityLog, User
 from app.schemas.schema_admin import (
     TagModel,
-    UserRole,
     UserUpdateAdminModel,
     UserUpdateAdminPasswordModel,
 )
@@ -375,32 +380,38 @@ async def delete_task(
 ######dashboard############
 async def dashboard(db: Database):
     user_logs = await db.scalar(
-        select(func.count(ActivityLog.id).where(ActivityLog.role == UserRole.USER))
+        select(func.count())
+        .select_from(ActivityLog)
+        .where(ActivityLog.role == UserRole.USER)
     )
     admin_logs = await db.scalar(
-        select(func.count(ActivityLog.id).where(ActivityLog.role == UserRole.ADMIN))
+        select(func.count())
+        .select_from(ActivityLog)
+        .where(ActivityLog.role == UserRole.ADMIN)
     )
 
     task_active = await db.scalar(
-        select(func.count(Task.id)).where(Task.is_active.is_(True))
+        select(func.count()).select_from(Task).where(Task.is_active.is_(True))
     )
     task_deactivate = await db.scalar(
-        select(func.count(Task.id)).where(Task.is_active.is_(False))
+        select(func.count()).select_from(Task).where(Task.is_active.is_(False))
     )
     project_active = await db.scalar(
-        select(func.count(Project.id)).where(Project.is_active.is_(True))
+        select(func.count()).select_from(Project).where(Project.is_active.is_(True))
     )
     project_deactivate = await db.scalar(
-        select(func.count(Project.id)).where(Project.is_active.is_(False))
+        select(func.count()).select_from(Project).where(Project.is_active.is_(False))
     )
     user_active = await db.scalar(
-        select(func.count(User.id)).where(User.is_active.is_(True))
+        select(func.count()).select_from(User).where(User.is_active.is_(True))
     )
     user_deactivate = await db.scalar(
-        select(func.count(User.id)).where(User.is_active.is_(False))
+        select(func.count()).select_from(User).where(User.is_active.is_(False))
     )
     admins = await db.scalar(
-        select(func.count(User.id)).where(
+        select(func.count())
+        .select_from(User)
+        .where(
             User.role == UserRole.ADMIN,
             User.is_active.is_(True),
         )
@@ -535,13 +546,10 @@ async def get_all_tag_with_project(
     project_id: int,
     page: int,
     page_size: int,
-    scope: TagScope | None = None,
     sort_by: str = "id",
     sort_order: str = "asc",
 ):
     conditions = [Tag.project_id == project_id]
-    if scope is not None:
-        conditions.append(Tag.scope == scope)
 
     query = select(Tag).where(*conditions)
 

@@ -3,16 +3,16 @@ from sqlalchemy import func, select
 from sqlalchemy.sql.elements import ColumnElement
 from starlette import status
 
-from app.database.dependency import (
+from app.core.enums import (
     ActivityAction,
-    Database,
-    GetUser,
-    add_log,
-    calculate_offset,
-    calculate_pages,
+    NotificationType,
+    ProjectRole,
+    ProjectStatus,
 )
-from app.models.model_project import Project, ProjectMembers, ProjectRole, ProjectStatus
-from app.models.model_task import Notification, NotificationType
+from app.core.utilities import add_log, calculate_offset, calculate_pages
+from app.database.dependency import Database, GetUser
+from app.models.model_project import Project, ProjectMembers
+from app.models.model_task import Notification
 from app.models.model_user import User
 from app.schemas.schema_project import (
     ProjectMember,
@@ -37,6 +37,7 @@ async def create_project(
         project_id=project_id, user_id=user_id, role=ProjectRole.OWNER
     )
     db.add(project_member)
+    await db.flush()
     add_log(
         action=ActivityAction.PROJECT_CREATED,
         description=f"Project '{project_model.name}' was created",
@@ -49,7 +50,7 @@ async def create_project(
             continue
         notification = Notification(
             creator_id=current_user.id,
-            user_id=user.id,
+            user_id=user.user_id,
             type=NotificationType.MEMBER_ADDED,
             title=f"User '{current_user.username}'  Add to Project",
             message=f"User '{current_user.username}' Add to Project '{project.name}' ",
@@ -81,8 +82,8 @@ async def get_project(
 
     query = (
         select(Project)
-        .where(*conditions)
         .join(ProjectMembers, Project.id == ProjectMembers.project_id)
+        .where(*conditions)
     )
 
     sort_columns = {
@@ -105,8 +106,8 @@ async def get_project(
     count_query = (
         select(func.count())
         .select_from(Project)
-        .where(*conditions)
         .join(ProjectMembers, Project.id == ProjectMembers.project_id)
+        .where(*conditions)
     )
 
     total = await db.scalar(count_query) or 0
@@ -373,10 +374,6 @@ async def project_update_member(
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail="You Cant Add Two Owner For One Project"
         )
-    if user_id == current_user.id:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, detail="Owner Cant Change Role For himself"
-        )
     user = await db.scalar(
         select(User).where(User.id == user_id, User.is_active.is_(True))
     )
@@ -396,6 +393,11 @@ async def project_update_member(
             status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to add members to this project.",
         )
+    elif role_member.role == ProjectRole.OWNER and user_id == current_user.id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Owner Cant Change Role For himself"
+        )
+
     result_member = await db.scalars(
         select(ProjectMembers).where(
             ProjectMembers.project_id == project_id,
@@ -463,6 +465,10 @@ async def project_delete_member(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail="Project owner cannot be removed.",
+        )
+    elif role_member.role == ProjectRole.OWNER and user_id == current_user.id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Owner Cant Delete himself"
         )
     await db.delete(member)
     add_log(

@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from enum import Enum
 
 from sqlalchemy import (
     BOOLEAN,
@@ -14,36 +13,13 @@ from sqlalchemy import (
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.enums import (
+    NotificationType,
+    TagScope,
+    TaskPriority,
+    TaskStatus,
+)
 from app.database.database import Base
-
-
-class TaskStatus(str, Enum):
-    ACTIVE = "active"
-    COMPLETED = "completed"
-    IN_PROGRESS = "in_progress"
-    CANCELLED = "cancelled"
-    EXPIRE = "expire"
-    ARCHIVED = "archived"
-
-
-class TimeUnit(str, Enum):
-    MINUTES = "minutes"
-    HOURS = "hours"
-    DAYS = "days"
-    WEEKS = "weeks"
-    MONTHS = "months"
-
-
-class TaskPriority(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    URGENT = "urgent"
-
-
-class TagScope(str, Enum):
-    PROJECT = "project"
-    GLOBAL = "global"
 
 
 class Task(Base):
@@ -61,9 +37,12 @@ class Task(Base):
     due_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(tz=timezone.utc) + timedelta(weeks=4),
+        nullable=False,
     )
-    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"))
-    creator_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("project.id", ondelete="CASCADE")
+    )
+    creator_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"))
     tags: Mapped[list["Tag"]] = relationship(
         secondary="task_labels", back_populates="tasks"
     )
@@ -96,9 +75,13 @@ class Task(Base):
 class TaskAssignee(Base):
     __tablename__ = "task_assignee"
 
-    task_id: Mapped[int] = mapped_column(ForeignKey("task.id"), primary_key=True)
+    task_id: Mapped[int] = mapped_column(
+        ForeignKey("task.id", ondelete="CASCADE"), primary_key=True
+    )
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class TaskLabel(Base):
@@ -106,7 +89,9 @@ class TaskLabel(Base):
     tag_id: Mapped[int] = mapped_column(
         ForeignKey("tag.id", ondelete="CASCADE"), primary_key=True
     )
-    task_id: Mapped[int] = mapped_column(ForeignKey("task.id"), primary_key=True)
+    task_id: Mapped[int] = mapped_column(
+        ForeignKey("task.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class Tag(Base):
@@ -117,7 +102,7 @@ class Tag(Base):
         SQLEnum(TagScope), default=TagScope.PROJECT, nullable=False
     )
     project_id: Mapped[int | None] = mapped_column(
-        ForeignKey("project.id"), nullable=True
+        ForeignKey("project.id", ondelete="CASCADE"), nullable=True
     )
     project: Mapped["Project|None"] = relationship(back_populates="tags")  # type: ignore  # noqa: F821
     tasks: Mapped[list["Task"]] = relationship(
@@ -131,7 +116,10 @@ class TaskDependency(Base):
     __tablename__ = "task_dependency"
 
     task_id: Mapped[int] = mapped_column(
-        ForeignKey("task.id", ondelete="CASCADE"),
+        ForeignKey(
+            "task.id",
+            ondelete="CASCADE",
+        ),
         primary_key=True,
     )
 
@@ -156,25 +144,6 @@ class Comment(Base):
     is_active: Mapped[bool] = mapped_column(BOOLEAN, server_default="True")
 
 
-class NotificationType(str, Enum):
-    MENTION = "mention"
-
-    TASK_ASSIGNED = "task_assigned"
-    TASK_STATUS_CHANGED = "task_status_changed"
-    TASK_UPDATED = "task_updated"
-
-    COMMENT_CREATED = "comment_created"
-
-    MEMBER_ADDED = "member_added"
-    MEMBER_REMOVED = "member_removed"
-    MEMBER_ROLE_CHANGED = "member_role_changed"
-
-    PROJECT_STATUS_CHANGED = "project_status_changed"
-
-    DEPENDENCY_ADDED = "dependency_added"
-    DEPENDENCY_REMOVED = "dependency_removed"
-
-
 class Notification(Base):
     __tablename__ = "notification"
     id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
@@ -185,9 +154,15 @@ class Notification(Base):
     type: Mapped[NotificationType] = mapped_column(SQLEnum(NotificationType))
     title: Mapped[str] = mapped_column(VARCHAR(250))
     message: Mapped[str] = mapped_column(TEXT)
-    project_id: Mapped[int] = mapped_column(INTEGER, ForeignKey("project.id"))
-    task_id: Mapped[int] = mapped_column(INTEGER, ForeignKey("task.id"))
-    comment_id: Mapped[int] = mapped_column(INTEGER, ForeignKey("comment.id"))
+    project_id: Mapped[int | None] = mapped_column(
+        INTEGER, ForeignKey("project.id"), nullable=True
+    )
+    task_id: Mapped[int | None] = mapped_column(
+        INTEGER, ForeignKey("task.id"), nullable=True
+    )
+    comment_id: Mapped[int | None] = mapped_column(
+        INTEGER, ForeignKey("comment.id"), nullable=True
+    )
     is_read: Mapped[bool] = mapped_column(BOOLEAN, server_default="False")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -203,3 +178,4 @@ class CommentMention(Base):
     comment_id: Mapped[int] = mapped_column(
         INTEGER, ForeignKey("comment.id", ondelete="CASCADE")
     )
+    __table_args__ = (UniqueConstraint("user_id", "comment_id"),)

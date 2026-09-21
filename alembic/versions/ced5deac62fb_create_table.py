@@ -1,8 +1,8 @@
-"""create table 
+"""create table
 
-Revision ID: 2076d7526d25
+Revision ID: ced5deac62fb
 Revises: 
-Create Date: 2026-09-15 09:29:15.039522
+Create Date: 2026-09-21 14:37:09.109852
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '2076d7526d25'
+revision: str = 'ced5deac62fb'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -51,8 +51,8 @@ def upgrade() -> None:
     sa.Column('project_id', sa.INTEGER(), nullable=False),
     sa.Column('user_id', sa.INTEGER(), nullable=True),
     sa.Column('role', sa.Enum('OWNER', 'MANAGER', 'MEMBER', 'VIEWER', name='projectrole'), nullable=False),
-    sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.ForeignKeyConstraint(['project_id'], ['project.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('project_id', 'user_id')
     )
@@ -61,7 +61,7 @@ def upgrade() -> None:
     sa.Column('name', sa.VARCHAR(length=250), nullable=False),
     sa.Column('scope', sa.Enum('PROJECT', 'GLOBAL', name='tagscope'), nullable=False),
     sa.Column('project_id', sa.INTEGER(), nullable=True),
-    sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
+    sa.ForeignKeyConstraint(['project_id'], ['project.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('project_id', 'name')
     )
@@ -77,16 +77,16 @@ def upgrade() -> None:
     sa.Column('project_id', sa.INTEGER(), nullable=False),
     sa.Column('creator_id', sa.INTEGER(), nullable=False),
     sa.Column('parent_task_id', sa.INTEGER(), nullable=True),
-    sa.ForeignKeyConstraint(['creator_id'], ['user.id'], ),
+    sa.ForeignKeyConstraint(['creator_id'], ['user.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['parent_task_id'], ['task.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
+    sa.ForeignKeyConstraint(['project_id'], ['project.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_task_title'), 'task', ['title'], unique=False)
     op.create_table('activity_log',
     sa.Column('id', sa.INTEGER(), nullable=False),
     sa.Column('role', sa.Enum('USER', 'ADMIN', name='userrole'), nullable=False),
-    sa.Column('action', sa.TEXT(), nullable=False),
+    sa.Column('action', sa.Enum('PROJECT_CREATED', 'PROJECT_UPDATED', 'PROJECT_DELETED', 'PROJECT_STATUS_CHANGED', 'TASK_CREATED', 'TASK_UPDATED', 'TASK_DELETED', 'TASK_STATUS_CHANGED', 'SUBTASK_CREATED', 'SUBTASK_UPDATED', 'SUBTASK_DELETED', 'SUBTASK_STATUS_CHANGED', 'TAG_CREATED', 'TAG_UPDATED', 'TAG_DELETED', 'COMMENT_CREATED', 'COMMENT_UPDATED', 'COMMENT_DELETED', 'USER_CREATED', 'USER_UPDATED', 'USER_DELETED', 'MEMBER_ADDED', 'MEMBER_REMOVED', 'MEMBER_ROLE_CHANGED', 'TASK_ASSIGNED', 'TASK_UNASSIGNED', 'TAG_ADDED_TO_TASK', 'TAG_REMOVED_FROM_TASK', 'DEPENDENCY_ADDED', 'DEPENDENCY_UPDATED', 'DEPENDENCY_REMOVED', name='activityaction'), nullable=False),
     sa.Column('description', sa.TEXT(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('user_id', sa.INTEGER(), nullable=True),
@@ -113,8 +113,8 @@ def upgrade() -> None:
     op.create_table('task_assignee',
     sa.Column('task_id', sa.INTEGER(), nullable=False),
     sa.Column('user_id', sa.INTEGER(), nullable=False),
-    sa.ForeignKeyConstraint(['task_id'], ['task.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.ForeignKeyConstraint(['task_id'], ['task.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('task_id', 'user_id')
     )
     op.create_table('task_dependency',
@@ -128,7 +128,7 @@ def upgrade() -> None:
     sa.Column('tag_id', sa.INTEGER(), nullable=False),
     sa.Column('task_id', sa.INTEGER(), nullable=False),
     sa.ForeignKeyConstraint(['tag_id'], ['tag.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['task_id'], ['task.id'], ),
+    sa.ForeignKeyConstraint(['task_id'], ['task.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('tag_id', 'task_id')
     )
     op.create_table('comment_mention',
@@ -137,18 +137,19 @@ def upgrade() -> None:
     sa.Column('comment_id', sa.INTEGER(), nullable=False),
     sa.ForeignKeyConstraint(['comment_id'], ['comment.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('user_id', 'comment_id')
     )
     op.create_table('notification',
     sa.Column('id', sa.INTEGER(), nullable=False),
     sa.Column('creator_id', sa.INTEGER(), nullable=False),
     sa.Column('user_id', sa.INTEGER(), nullable=False),
-    sa.Column('type', sa.Enum('MENTION', 'TASK_ASSIGNED', 'TASK_STATUS_CHANGED', 'COMMENT_CREATED', 'MEMBER_ADDED', 'MEMBER_REMOVED', 'MEMBER_ROLE_CHANGED', 'PROJECT_STATUS_CHANGED', 'DEPENDENCY_ADDED', 'DEPENDENCY_REMOVED', name='notificationtype'), nullable=False),
+    sa.Column('type', sa.Enum('MENTION', 'TASK_ASSIGNED', 'TASK_STATUS_CHANGED', 'TASK_UPDATED', 'COMMENT_CREATED', 'MEMBER_ADDED', 'MEMBER_REMOVED', 'MEMBER_ROLE_CHANGED', 'PROJECT_STATUS_CHANGED', 'DEPENDENCY_ADDED', 'DEPENDENCY_REMOVED', name='notificationtype'), nullable=False),
     sa.Column('title', sa.VARCHAR(length=250), nullable=False),
     sa.Column('message', sa.TEXT(), nullable=False),
-    sa.Column('project_id', sa.INTEGER(), nullable=False),
-    sa.Column('task_id', sa.INTEGER(), nullable=False),
-    sa.Column('comment_id', sa.INTEGER(), nullable=False),
+    sa.Column('project_id', sa.INTEGER(), nullable=True),
+    sa.Column('task_id', sa.INTEGER(), nullable=True),
+    sa.Column('comment_id', sa.INTEGER(), nullable=True),
     sa.Column('is_read', sa.BOOLEAN(), server_default='False', nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['comment_id'], ['comment.id'], ),

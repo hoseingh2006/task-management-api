@@ -1,16 +1,14 @@
 from fastapi import APIRouter, Query
 from starlette import status
 
+from app.core.enums import NotificationType, TaskPriority, TaskStatus
 from app.database.dependency import Database, GetUser
-from app.models.model_task import NotificationType
 from app.schemas.schema_task import (
     CommentModel,
     TagProjectModel,
     TagTaskModel,
     TaskDependencyDelete,
     TaskModel,
-    TaskPriority,
-    TaskStatus,
     TaskStatusUpdateModel,
     TaskUpdateModel,
 )
@@ -131,7 +129,7 @@ async def update_tag(
         db=db,
         project_id=project_id,
         tag_id=tag_id,
-    )
+    )  # type: ignore
 
 
 @route.delete("/tag/{tag_id}", status_code=status.HTTP_200_OK)
@@ -162,7 +160,7 @@ async def get_all_project_tag(
     )
 
 
-@route.get("/tag/{task_id}", status_code=status.HTTP_200_OK)
+@route.get("/tag/task/{task_id}", status_code=status.HTTP_200_OK)
 async def get_all_project_tag_with_task(
     current_user: GetUser,
     project_id: int,
@@ -178,7 +176,7 @@ async def get_all_project_tag_with_task(
 
 
 ##########tag project\task##########
-@route.post("/tag/{task_id}", status_code=status.HTTP_201_CREATED)
+@route.post("/tag/task/{task_id}", status_code=status.HTTP_201_CREATED)
 async def add_tags_to_task(
     tag_model: TagTaskModel,
     task_id: int,
@@ -237,7 +235,7 @@ async def get_subtask_with_task(
         priority=priority,
         sort_by=sort_by,
         sort_order=sort_order,
-    )
+    )  # type: ignore
 
 
 @route.put("/subtask/{task_id}/{subtask_id}", status_code=status.HTTP_200_OK)
@@ -256,7 +254,7 @@ async def update_subtask(
         project_id=project_id,
         task_id=task_id,
         subtask_id=subtask_id,
-    )
+    )  # type: ignore
 
 
 @route.delete("/subtask/{task_id}/{subtask_id}", status_code=status.HTTP_200_OK)
@@ -273,7 +271,7 @@ async def delete_subtask(
         project_id=project_id,
         task_id=task_id,
         subtask_id=subtask_id,
-    )
+    )  # type: ignore
 
 
 ##########task dependency##########
@@ -435,7 +433,7 @@ async def get_all_unread_notification(
         notification_type=notification_type,
         sort_by=sort_by,
         sort_order=sort_order,
-    )
+    )  # type: ignore
 
 
 @route.get("/notification/project", status_code=status.HTTP_200_OK)
@@ -534,15 +532,9 @@ async def get_notification_by_id(
     db: Database,
     notification_id: int,
     current_user: GetUser,
-    notification_type: NotificationType | None = None,
-    sort_by: str = Query("id"),
-    sort_order: str = Query("asc"),
 ):
     return await service_task.get_notification_by_id(
         db=db,
         current_user=current_user,
         notification_id=notification_id,
-        notification_type=notification_type,
-        sort_by=sort_by,
-        sort_order=sort_order,
     )

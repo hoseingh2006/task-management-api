@@ -1,5 +1,4 @@
 from datetime import datetime
-from enum import Enum
 
 from sqlalchemy import (
     BOOLEAN,
@@ -14,20 +13,8 @@ from sqlalchemy import (
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.enums import ProjectRole, ProjectStatus
 from app.database.database import Base
-
-
-class ProjectRole(str, Enum):
-    OWNER = "owner"
-    MANAGER = "manager"
-    MEMBER = "member"
-    VIEWER = "viewer"
-
-
-class ProjectStatus(str, Enum):
-    ACTIVE = "active"
-    COMPLETED = "completed"
-    ARCHIVED = "archived"
 
 
 class Project(Base):
@@ -54,8 +41,12 @@ class Project(Base):
 class ProjectMembers(Base):
     __tablename__ = "project_members"
     id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"))
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("project.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
     role: Mapped[ProjectRole] = mapped_column(
         SQLEnum(ProjectRole),
         default=ProjectRole.MEMBER,

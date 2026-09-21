@@ -1,12 +1,10 @@
 from fastapi import APIRouter, Query
 from starlette import status
 
+from app.core.enums import ProjectStatus, TagScope, TaskPriority, TaskStatus, UserRole
 from app.database.dependency import Database, GetAdmin
-from app.models.model_project import ProjectStatus
-from app.models.model_task import TagScope, TaskPriority, TaskStatus
 from app.schemas.schema_admin import (
     TagModel,
-    UserRole,
     UserUpdateAdminModel,
     UserUpdateAdminPasswordModel,
 )
@@ -215,7 +213,6 @@ async def get_all_tag_by_project(
     project_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, le=100, ge=1),
-    scope: TagScope | None = None,
     sort_by: str = Query("id"),
     sort_order: str = Query("asc"),
 ):
@@ -224,7 +221,6 @@ async def get_all_tag_by_project(
         project_id=project_id,
         page_size=page_size,
         page=page,
-        scope=scope,
         sort_by=sort_by,
         sort_order=sort_order,
     )

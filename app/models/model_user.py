@@ -1,16 +1,11 @@
 from datetime import datetime
-from enum import Enum
 
 from sqlalchemy import BOOLEAN, INTEGER, TEXT, VARCHAR, DateTime, ForeignKey, func
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.enums import ActivityAction, UserRole
 from app.database.database import Base
-
-
-class UserRole(str, Enum):
-    USER = "user"
-    ADMIN = "admin"
 
 
 class User(Base):
@@ -45,7 +40,7 @@ class ActivityLog(Base):
         SQLEnum(UserRole),
         default=UserRole.USER,
     )
-    action: Mapped[str] = mapped_column(TEXT, index=True)
+    action: Mapped[ActivityAction] = mapped_column(SQLEnum(ActivityAction), index=True)
     description: Mapped[str] = mapped_column(TEXT)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

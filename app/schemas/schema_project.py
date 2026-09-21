@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from app.models.model_project import ProjectRole, ProjectStatus
+from app.core.enums import ProjectRole, ProjectStatus
 
 
 class ProjectModel(BaseModel):

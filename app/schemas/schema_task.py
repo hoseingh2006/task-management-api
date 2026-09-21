@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from app.models.model_task import TaskPriority, TaskStatus, TimeUnit
+from app.core.enums import TaskPriority, TaskStatus, TimeUnit
 
 
 class TaskModel(BaseModel):

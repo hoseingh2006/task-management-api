@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from app.models.model_user import UserRole
+from app.core.enums import UserRole
 
 
 class UserUpdateAdminModel(BaseModel):

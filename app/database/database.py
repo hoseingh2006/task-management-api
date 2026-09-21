@@ -4,7 +4,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-URL = URL.create(
+DB_URL = URL.create(
     "postgresql+asyncpg",
     settings.database_user,
     settings.database_password,
@@ -12,8 +12,8 @@ URL = URL.create(
     settings.database_port,
     settings.database_name,
 )
-ENGIN = create_async_engine(URL, echo=True)
-LocalSession = async_sessionmaker(ENGIN, autoflush=False, autocommit=False)
+DB_ENGIN = create_async_engine(DB_URL, echo=True)
+LocalSession = async_sessionmaker(DB_ENGIN, autoflush=False, autocommit=False)
 
 
 class Base(DeclarativeBase):

@@ -4,10 +4,14 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
 from starlette import status
 
-from app.database.dependency import (
+from app.core.enums import (
     ActivityAction,
-    Database,
-    GetUser,
+    NotificationType,
+    ProjectRole,
+    TaskPriority,
+    TaskStatus,
+)
+from app.core.utilities import (
     add_log,
     calculate_due_time,
     calculate_offset,
@@ -15,19 +19,21 @@ from app.database.dependency import (
     find_mentions,
     has_dependency_cycle,
 )
-from app.models.model_project import Project, ProjectMembers, ProjectRole
+from app.database.dependency import (
+    Database,
+    GetUser,
+)
+from app.models.model_project import Project, ProjectMembers
 from app.models.model_task import (
     Comment,
     CommentMention,
     Notification,
-    NotificationType,
     Tag,
     TagScope,
     Task,
     TaskAssignee,
     TaskDependency,
     TaskLabel,
-    TaskPriority,
 )
 from app.models.model_user import User
 from app.schemas.schema_task import (
@@ -36,7 +42,6 @@ from app.schemas.schema_task import (
     TagTaskModel,
     TaskDependencyDelete,
     TaskModel,
-    TaskStatus,
     TaskStatusUpdateModel,
     TaskUpdateModel,
 )
@@ -114,26 +119,33 @@ async def create_task(
     else:
         users = []
 
-    if (task_model.due_value is None) != (task_model.due_unit is None):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="due_value and due_unit must be provided together",
-        )
-    due_time = None
+    # if (task_model.due_value is None) != (task_model.due_unit is None):
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST,
+    #         detail="due_value and due_unit must be provided together",
+    #     )
+    # due_time = None
 
     if task_model.due_value is not None and task_model.due_unit is not None:
         due_time = calculate_due_time(
             value=task_model.due_value, unit=task_model.due_unit
         )
-
-    task = Task(
-        title=task_model.title,
-        description=task_model.description,
-        project_id=project_id,
-        due_date=due_time,
-        priority=task_model.priority,
-        creator_id=current_user.id,
-    )
+        task = Task(
+            title=task_model.title,
+            description=task_model.description,
+            project_id=project_id,
+            due_date=due_time,
+            priority=task_model.priority,
+            creator_id=current_user.id,
+        )
+    else:
+        task = Task(
+            title=task_model.title,
+            description=task_model.description,
+            project_id=project_id,
+            priority=task_model.priority,
+            creator_id=current_user.id,
+        )
 
     task.assignees = users  # type: ignore
 
@@ -543,6 +555,8 @@ async def update_task(
                 project_id=project_id,
                 task_id=task.id,
             )
+    await db.commit()
+    return {"message": "Update Task is successfully!"}
 
 
 async def delete_task(
@@ -573,7 +587,7 @@ async def delete_task(
 
         task.is_active = False
         task.status = TaskStatus.ARCHIVED
-        await db.commit()
+
         add_log(
             action=ActivityAction.TASK_DELETED,
             description=f"Task '{task.title}' Deleted",
@@ -582,6 +596,7 @@ async def delete_task(
             project_id=project_id,
             task_id=task.id,
         )
+        await db.commit()
         return {"massage": "delete successfully!"}
     else:
         raise HTTPException(
@@ -612,7 +627,9 @@ async def update_task_status(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found project")
     if project.role in (ProjectRole.OWNER, ProjectRole.MANAGER):
         result = await db.scalars(
-            select(Task).where(
+            select(Task)
+            .options(selectinload(Task.assignees))
+            .where(
                 Task.project_id == project_id,
                 Task.id == task_id,
                 Task.is_active.is_(True),
@@ -621,6 +638,7 @@ async def update_task_status(
     elif project.role == ProjectRole.MEMBER:  # MEMBER
         result = await db.scalars(
             select(Task)
+            .options(selectinload(Task.assignees))
             .join(TaskAssignee, Task.id == TaskAssignee.task_id)
             .where(
                 Task.project_id == project_id,
@@ -637,55 +655,88 @@ async def update_task_status(
     task = result.first()
     if task is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not find task")
-    if status_model.status in (TaskStatus.COMPLETED, TaskStatus.IN_PROGRESS):
-        result = await db.scalars(
-            select(Task.status)
-            .join(TaskDependency, TaskDependency.depends_on_task_id == Task.id)
-            .where(
-                TaskDependency.task_id == task.id,
-                Task.is_active.is_(True),
-            )
+    if status_model.status is TaskStatus.ARCHIVED:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="For archive use delete endpoint",
         )
-        dependency_statuses = result.all()
+
+    if status_model.status is TaskStatus.EXPIRE:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Task expiration is handled automatically",
+        )
+
+    if task.status is status_model.status:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Task already has this status",
+        )
+
+    if status_model.status in (
+        TaskStatus.COMPLETED,
+        TaskStatus.IN_PROGRESS,
+    ):
+        dependency_statuses = (
+            await db.scalars(
+                select(Task.status)
+                .join(
+                    TaskDependency,
+                    TaskDependency.depends_on_task_id == Task.id,
+                )
+                .where(
+                    TaskDependency.task_id == task.id,
+                    Task.is_active.is_(True),
+                )
+            )
+        ).all()
+
         if any(status != TaskStatus.COMPLETED for status in dependency_statuses):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail="You must complete all dependencies first",
             )
 
-    if status_model.status is TaskStatus.ARCHIVED:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail="for archive use delete endpoint"
-        )
+    old_status = task.status
+    task.status = status_model.status
+
     for user in task.assignees:
         if user.id == current_user.id:
             continue
-        notification = Notification(
-            creator_id=current_user.id,
-            user_id=user.id,
-            type=NotificationType.TASK_STATUS_CHANGED,
-            title=f"Task '{task.title}' status changed",
-            message=(
-                f"User '{current_user.username}' changed the task status "
-                f"to '{status_model.status.value}'."
-            ),
-            project_id=task.project_id,
-            task_id=task.id,
+
+        db.add(
+            Notification(
+                creator_id=current_user.id,
+                user_id=user.id,
+                type=NotificationType.TASK_STATUS_CHANGED,
+                title=f"Task '{task.title}' status changed",
+                message=(
+                    f"User '{current_user.username}' changed the task status "
+                    f"from '{old_status.value}' to '{task.status.value}'."
+                ),
+                project_id=task.project_id,
+                task_id=task.id,
+            )
         )
-        db.add(notification)
-    task.status = status_model.status
 
     add_log(
         action=ActivityAction.TASK_STATUS_CHANGED,
-        description=f"Task '{task.title}' Status Changed to '{task.status}'",
+        description=(
+            f"Task '{task.title}' status changed "
+            f"from '{old_status.value}' to '{task.status.value}'"
+        ),
         db=db,
         current_user=current_user,
         project_id=project_id,
         task_id=task.id,
     )
+
     await db.commit()
     await db.refresh(task)
-    return {"message": "successfully update task status "}
+    return {
+        "message": "Task status updated successfully",
+        "status": task.status.value,
+    }
 
 
 ##########tag project\task##########
@@ -1131,27 +1182,37 @@ async def create_subtask(
     else:
         users = []
 
-    if (task_model.due_value is None) != (task_model.due_unit is None):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="due_value and due_unit must be provided together",
-        )
-    due_time = None
+    # if (task_model.due_value is None) != (task_model.due_unit is None):
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST,
+    #         detail="due_value and due_unit must be provided together",
+    #     )
+    # due_time = None
 
     if task_model.due_value is not None and task_model.due_unit is not None:
         due_time = calculate_due_time(
             value=task_model.due_value, unit=task_model.due_unit
         )
 
-    subtask = Task(
-        title=task_model.title,
-        description=task_model.description,
-        project_id=project_id,
-        due_date=due_time,
-        parent_task_id=task.id,
-        priority=task_model.priority,
-        creator_id=current_user.id,
-    )
+        subtask = Task(
+            title=task_model.title,
+            description=task_model.description,
+            project_id=project_id,
+            due_date=due_time,
+            parent_task_id=task.id,
+            priority=task_model.priority,
+            creator_id=current_user.id,
+        )
+    else:
+        subtask = Task(
+            title=task_model.title,
+            description=task_model.description,
+            project_id=project_id,
+            parent_task_id=task.id,
+            priority=task_model.priority,
+            creator_id=current_user.id,
+        )
+
     add_log(
         action=ActivityAction.SUBTASK_CREATED,
         description=f"subtask '{subtask.title}' Add to '{task.title}'",
@@ -1359,7 +1420,9 @@ async def update_subtask(
             detail="You don't have permission to create task",
         )
     result_task = await db.scalars(
-        select(Task).where(
+        select(Task)
+        .options(selectinload(Task.assignees))
+        .where(
             Task.project_id == project_id,
             Task.id == task_id,
             Task.is_active.is_(True),
@@ -1925,7 +1988,7 @@ async def delete_task_comment(
         )
     await db.delete(comment)
     add_log(
-        action=ActivityAction.COMMENT_CREATED,
+        action=ActivityAction.COMMENT_DELETED,
         description=f"Comment '{comment.content}' Deleted to '{task.title}' ",
         db=db,
         current_user=current_user,

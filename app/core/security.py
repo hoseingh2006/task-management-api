@@ -10,7 +10,6 @@ def verify_pass(hash_password: str, password: str):
     return Password_hash.verify(password, hash_password)
 
 
-postgres_pass = settings.database_password
 SECRET_KEY = settings.secret_key
 ALGORITHM = settings.algorithm
 
