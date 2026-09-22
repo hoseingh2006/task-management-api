@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="sidebar-backdrop"></div>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">📋 PM App</div>
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" data-name="dashboard">🏠 Dashboard</a></li>
+                <li><a href="projects.html" data-name="projects">📁 Projects</a></li>
+                <li><a href="notifications.html" data-name="notifications">🔔 Notifications</a></li>
+                <li><a href="profile.html" data-name="profile">👤 Profile</a></li>
+                <li><a href="admin.html" data-name="admin" id="adminLink" style="display:none;">⚙️ Admin</a></li>
+                <li><a href="#" id="logoutBtn">🚪 Logout</a></li>
+            </ul>
+        </aside>
+
+        <main class="main">
+            <div class="topbar">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button class="menu-toggle">☰</button>
+                    <h1>Profile</h1>
+                </div>
+                <div class="user-menu">
+                    <div class="avatar" id="userAvatar">?</div>
+                    <span id="userName">...</span>
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Account Info</div>
+                    </div>
+                    <form id="profileForm">
+                        <div class="form-group">
+                            <label>Username</label>
+                            <input class="form-control" type="text" id="pUsername">
+                        </div>
+                        <div class="form-group">
+                            <label>First Name</label>
+                            <input class="form-control" type="text" id="pFirstName">
+                        </div>
+                        <div class="form-group">
+                            <label>Last Name</label>
+                            <input class="form-control" type="text" id="pLastName">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input class="form-control" type="email" id="pEmail">
+                        </div>
+                        <button class="btn btn-primary" type="submit">Update Profile</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Change Password</div>
+                    </div>
+                    <form id="passForm">
+                        <div class="form-group">
+                            <label>Old Password</label>
+                            <input class="form-control" type="password" id="oldPass" required>
+                        </div>
+                        <div class="form-group">
+                            <label>New Password</label>
+                            <input class="form-control" type="password" id="newPass" required minlength="6">
+                        </div>
+                        <button class="btn btn-primary" type="submit">Change Password</button>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/profile.js"></script>
+</body>
+
+</html>

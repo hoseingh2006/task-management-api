@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projects</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="sidebar-backdrop"></div>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">📋 PM App</div>
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" data-name="dashboard">🏠 Dashboard</a></li>
+                <li><a href="projects.html" data-name="projects">📁 Projects</a></li>
+                <li><a href="notifications.html" data-name="notifications">🔔 Notifications</a></li>
+                <li><a href="profile.html" data-name="profile">👤 Profile</a></li>
+                <li><a href="admin.html" data-name="admin" id="adminLink" style="display:none;">⚙️ Admin</a></li>
+                <li><a href="#" id="logoutBtn">🚪 Logout</a></li>
+            </ul>
+        </aside>
+
+        <main class="main">
+            <div class="topbar">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button class="menu-toggle">☰</button>
+                    <h1>Projects</h1>
+                </div>
+                <div class="user-menu">
+                    <div class="avatar" id="userAvatar">?</div>
+                    <span id="userName">...</span>
+                </div>
+            </div>
+
+            <div class="filter-bar">
+                <select class="form-control" id="filterStatus">
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="completed">Completed</option>
+                    <option value="archived">Archived</option>
+                </select>
+                <input class="form-control" id="searchInput" placeholder="Search..." style="min-width:200px;">
+                <button class="btn btn-primary" id="newProjectBtn">+ New Project</button>
+            </div>
+
+            <div id="projectsList">
+                <div class="loader"></div>
+            </div>
+            <div class="pagination" id="pagination"></div>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="projectModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>New Project</h2>
+                <button class="btn-icon" onclick="modalClose('projectModal')">✕</button>
+            </div>
+            <form id="newProjectForm">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input class="form-control" type="text" id="projName" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea class="form-control" id="projDesc" rows="3"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="modalClose('projectModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/projects.js"></script>
+</body>
+
+</html>

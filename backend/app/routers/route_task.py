@@ -1,0 +1,540 @@
+from fastapi import APIRouter, Query
+from starlette import status
+
+from app.core.enums import NotificationType, TaskPriority, TaskStatus
+from app.database.dependency import Database, GetUser
+from app.schemas.schema_task import (
+    CommentModel,
+    TagProjectModel,
+    TagTaskModel,
+    TaskDependencyDelete,
+    TaskModel,
+    TaskStatusUpdateModel,
+    TaskUpdateModel,
+)
+from app.services import service_task
+
+route = APIRouter()
+
+
+##########Status task Routers##########
+@route.patch("/status/{task_id}", status_code=status.HTTP_200_OK)
+async def update_task_status(
+    status_model: TaskStatusUpdateModel,
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    task_id: int,
+):
+    return await service_task.update_task_status(
+        status_model=status_model,
+        current_user=current_user,
+        db=db,
+        project_id=project_id,
+        task_id=task_id,
+    )
+
+
+##########tag project\task##########
+@route.post("/tag", status_code=status.HTTP_201_CREATED)
+async def create_tag(
+    tag_model: TagProjectModel, db: Database, current_user: GetUser, project_id: int
+):
+    return await service_task.create_tag(
+        tag_model=tag_model, db=db, current_user=current_user, project_id=project_id
+    )
+
+
+@route.put("/tag/{tag_id}", status_code=status.HTTP_200_OK)
+async def update_tag(
+    tag_model: TagProjectModel,
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    tag_id: int,
+):
+    return await service_task.update_tag(
+        tag_model=tag_model,
+        current_user=current_user,
+        db=db,
+        project_id=project_id,
+        tag_id=tag_id,
+    )  # type: ignore
+
+
+@route.delete("/tag/{tag_id}", status_code=status.HTTP_200_OK)
+async def delete_tag(current_user: GetUser, project_id: int, db: Database, tag_id: int):
+    return await service_task.delete_tag(
+        current_user=current_user, project_id=project_id, db=db, tag_id=tag_id
+    )
+
+
+@route.get("/tag", status_code=status.HTTP_200_OK)
+async def get_all_project_tag(
+    current_user: GetUser,
+    project_id: int,
+    db: Database,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
+):
+    return await service_task.select_all_project_tag(
+        current_user=current_user,
+        project_id=project_id,
+        db=db,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+
+@route.get("/tag/task/{task_id}", status_code=status.HTTP_200_OK)
+async def get_all_project_tag_with_task(
+    current_user: GetUser,
+    project_id: int,
+    db: Database,
+    task_id: int,
+):
+    return await service_task.select_all_tag_with_project_task(
+        current_user=current_user,
+        project_id=project_id,
+        db=db,
+        task_id=task_id,
+    )
+
+
+##########tag project\task##########
+@route.post("/tag/task/{task_id}", status_code=status.HTTP_201_CREATED)
+async def add_tags_to_task(
+    tag_model: TagTaskModel,
+    task_id: int,
+    db: Database,
+    current_user: GetUser,
+    project_id: int,
+):
+    return await service_task.add_tags_to_task(
+        tag_model=tag_model,
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+        task_id=task_id,
+    )
+
+
+##########subtask##########
+@route.post("/subtask/{task_id}", status_code=status.HTTP_201_CREATED)
+async def create_subtask(
+    task_model: TaskModel,
+    db: Database,
+    task_id: int,
+    current_user: GetUser,
+    project_id: int,
+):
+    return await service_task.create_subtask(
+        task_model=task_model,
+        db=db,
+        task_id=task_id,
+        current_user=current_user,
+        project_id=project_id,
+    )
+
+
+@route.get("/subtask/{task_id}", status_code=status.HTTP_200_OK)
+async def get_subtask_with_task(
+    current_user: GetUser,
+    project_id: int,
+    db: Database,
+    task_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
+    task_status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
+):
+    return await service_task.get_subtask_with_task(
+        current_user=current_user,
+        project_id=project_id,
+        db=db,
+        task_id=task_id,
+        page=page,
+        page_size=page_size,
+        task_status=task_status,
+        priority=priority,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )  # type: ignore
+
+
+@route.put("/subtask/{task_id}/{subtask_id}", status_code=status.HTTP_200_OK)
+async def update_subtask(
+    task_model: TaskUpdateModel,
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    task_id: int,
+    subtask_id: int,
+):
+    return await service_task.update_subtask(
+        task_model=task_model,
+        current_user=current_user,
+        db=db,
+        project_id=project_id,
+        task_id=task_id,
+        subtask_id=subtask_id,
+    )  # type: ignore
+
+
+@route.delete("/subtask/{task_id}/{subtask_id}", status_code=status.HTTP_200_OK)
+async def delete_subtask(
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    task_id: int,
+    subtask_id: int,
+):
+    return await service_task.delete_subtask(
+        current_user=current_user,
+        db=db,
+        project_id=project_id,
+        task_id=task_id,
+        subtask_id=subtask_id,
+    )  # type: ignore
+
+
+##########task dependency##########
+@route.get("/depends/{task_id}", status_code=status.HTTP_200_OK)
+async def get_task_dependency_by_id(
+    current_user: GetUser,
+    project_id: int,
+    db: Database,
+    task_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
+    task_status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+):
+    return await service_task.get_task_dependency(
+        current_user=current_user,
+        project_id=project_id,
+        db=db,
+        task_id=task_id,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        task_status=task_status,
+        priority=priority,
+    )
+
+
+@route.delete("/depends/{task_id}", status_code=status.HTTP_200_OK)
+async def delete_task_dependency(
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    task_id: int,
+    model_dependency: TaskDependencyDelete,
+):
+    return await service_task.delete_task_dependency(
+        current_user=current_user,
+        db=db,
+        project_id=project_id,
+        task_id=task_id,
+        model_dependency=model_dependency,
+    )
+
+
+##########task comment##########
+@route.post("/{task_id}/comments", status_code=status.HTTP_201_CREATED)
+async def add_task_comment(
+    model_comment: CommentModel,
+    db: Database,
+    task_id: int,
+    current_user: GetUser,
+):
+    return await service_task.add_task_comment(
+        model_comment=model_comment,
+        db=db,
+        task_id=task_id,
+        current_user=current_user,
+    )
+
+
+@route.get("/{task_id}/comments", status_code=status.HTTP_200_OK)
+async def get_task_comments(
+    db: Database,
+    task_id: int,
+    current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
+):
+    return await service_task.get_task_comments(
+        db=db,
+        task_id=task_id,
+        current_user=current_user,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+
+@route.delete("/{task_id}/comments/{task_comment_id}", status_code=status.HTTP_200_OK)
+async def delete_task_comment(
+    db: Database, task_id: int, current_user: GetUser, task_comment_id: int
+):
+    return await service_task.delete_task_comment(
+        db=db,
+        task_id=task_id,
+        current_user=current_user,
+        task_comment_id=task_comment_id,
+    )
+
+
+@route.put("/{task_id}/comments/{task_comment_id}", status_code=status.HTTP_200_OK)
+async def update_task_comment(
+    db: Database,
+    task_id: int,
+    current_user: GetUser,
+    model_comment: CommentModel,
+    task_comment_id: int,
+):
+    return await service_task.update_task_comment(
+        model_comment=model_comment,
+        db=db,
+        task_id=task_id,
+        current_user=current_user,
+        task_comment_id=task_comment_id,
+    )
+
+
+##########task Mention##########
+@route.patch("/notification/read-all", status_code=status.HTTP_200_OK)
+async def notification_read_all(
+    db: Database,
+    current_user: GetUser,
+):
+    return await service_task.notification_read_all(db=db, current_user=current_user)
+
+
+@route.get("/notification", status_code=status.HTTP_200_OK)
+async def get_all_notification(
+    db: Database,
+    current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
+    notification_type: NotificationType | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
+):
+    return await service_task.get_all_notification(
+        db=db,
+        current_user=current_user,
+        page=page,
+        page_size=page_size,
+        notification_type=notification_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+
+@route.get("/notification/unread", status_code=status.HTTP_200_OK)
+async def get_all_unread_notification(
+    db: Database,
+    current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
+    notification_type: NotificationType | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
+):
+    return await service_task.get_all_unread_notification(
+        db=db,
+        current_user=current_user,
+        page_size=page_size,
+        page=page,
+        notification_type=notification_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )  # type: ignore
+
+
+@route.get("/notification/project", status_code=status.HTTP_200_OK)
+async def get_notification_by_project_id(
+    db: Database,
+    project_id: int,
+    current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
+    notification_type: NotificationType | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
+):
+    return await service_task.get_notification_by_project_id(
+        db=db,
+        current_user=current_user,
+        project_id=project_id,
+        page_size=page_size,
+        page=page,
+        notification_type=notification_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+
+@route.get("/notification/task/{task_id}", status_code=status.HTTP_200_OK)
+async def get_notification_by_task_id(
+    db: Database,
+    task_id: int,
+    current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
+    notification_type: NotificationType | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
+):
+    return await service_task.get_notification_by_task_id(
+        db=db,
+        current_user=current_user,
+        task_id=task_id,
+        page_size=page_size,
+        page=page,
+        notification_type=notification_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+
+@route.get("/notification/comment/{comment_id}", status_code=status.HTTP_200_OK)
+async def get_notification_by_comment_id(
+    db: Database,
+    comment_id: int,
+    current_user: GetUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
+    notification_type: NotificationType | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
+):
+    return await service_task.get_notification_by_comment_id(
+        db=db,
+        current_user=current_user,
+        comment_id=comment_id,
+        page_size=page_size,
+        page=page,
+        notification_type=notification_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+
+@route.patch("/notification/{notification_id}/read", status_code=status.HTTP_200_OK)
+async def notification_update_read(
+    db: Database,
+    notification_id: int,
+    current_user: GetUser,
+):
+    return await service_task.notification_update_read(
+        db=db, current_user=current_user, notification_id=notification_id
+    )
+
+
+@route.delete("/notification/{notification_id}", status_code=status.HTTP_200_OK)
+async def notification_delete(
+    db: Database,
+    notification_id: int,
+    current_user: GetUser,
+):
+    return await service_task.notification_delete(
+        db=db, current_user=current_user, notification_id=notification_id
+    )
+
+
+@route.get("/notification/{notification_id}", status_code=status.HTTP_200_OK)
+async def get_notification_by_id(
+    db: Database,
+    notification_id: int,
+    current_user: GetUser,
+):
+    return await service_task.get_notification_by_id(
+        db=db,
+        current_user=current_user,
+        notification_id=notification_id,
+    )
+
+
+##########Task Routers##########
+@route.post("/", status_code=status.HTTP_201_CREATED)
+async def create_task(
+    task_model: TaskModel, db: Database, current_user: GetUser, project_id: int
+):
+    return await service_task.create_task(
+        task_model=task_model, db=db, current_user=current_user, project_id=project_id
+    )
+
+
+@route.get("/", status_code=status.HTTP_200_OK)
+async def get_tasks(
+    current_user: GetUser,
+    project_id: int,
+    db: Database,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, le=100, ge=1),
+    task_status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+    sort_by: str = Query("id"),
+    sort_order: str = Query("asc"),
+):
+    return await service_task.get_tasks(
+        current_user=current_user,
+        project_id=project_id,
+        db=db,
+        page=page,
+        page_size=page_size,
+        task_status=task_status,
+        priority=priority,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+
+@route.get("/{task_id}", status_code=status.HTTP_200_OK)
+async def get_task_id(
+    current_user: GetUser, project_id: int, db: Database, task_id: int
+):
+    return await service_task.get_task_id(
+        current_user=current_user, project_id=project_id, db=db, task_id=task_id
+    )
+
+
+@route.put("/{task_id}", status_code=status.HTTP_200_OK)
+async def update_task(
+    task_model: TaskUpdateModel,
+    current_user: GetUser,
+    db: Database,
+    project_id: int,
+    task_id: int,
+):
+    return await service_task.update_task(
+        task_model=task_model,
+        current_user=current_user,
+        db=db,
+        project_id=project_id,
+        task_id=task_id,
+    )
+
+
+@route.delete("/{task_id}", status_code=status.HTTP_200_OK)
+async def delete_task(
+    current_user: GetUser, project_id: int, db: Database, task_id: int
+):
+    return await service_task.delete_task(
+        current_user=current_user, project_id=project_id, db=db, task_id=task_id
+    )

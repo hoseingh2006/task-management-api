@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="sidebar-backdrop"></div>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">📋 PM App</div>
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" data-name="dashboard">🏠 Dashboard</a></li>
+                <li><a href="projects.html" data-name="projects">📁 Projects</a></li>
+                <li><a href="notifications.html" data-name="notifications">🔔 Notifications</a></li>
+                <li><a href="profile.html" data-name="profile">👤 Profile</a></li>
+                <li><a href="admin.html" data-name="admin" id="adminLink" style="display:none;">⚙️ Admin</a></li>
+                <li><a href="#" id="logoutBtn">🚪 Logout</a></li>
+            </ul>
+        </aside>
+
+        <main class="main">
+            <div class="topbar">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button class="menu-toggle">☰</button>
+                    <h1 id="taskTitle">Loading...</h1>
+                </div>
+                <div class="user-menu">
+                    <div class="avatar" id="userAvatar">?</div>
+                    <span id="userName">...</span>
+                </div>
+            </div>
+
+            <div id="taskInfo"></div>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="subtasks">Subtasks</button>
+                <button class="tab" data-tab="comments">Comments</button>
+                <button class="tab" data-tab="dependencies">Dependencies</button>
+                <button class="tab" data-tab="tags">Tags</button>
+            </div>
+
+            <section id="tab-subtasks">
+                <div class="filter-bar">
+                    <button class="btn btn-primary" id="newSubtaskBtn">+ New Subtask</button>
+                </div>
+                <div id="subtasksList">
+                    <div class="loader"></div>
+                </div>
+                <div class="pagination" id="subtasksPagination"></div>
+            </section>
+
+            <section id="tab-comments" style="display:none;">
+                <div class="card">
+                    <textarea class="form-control" id="newComment" rows="2"
+                        placeholder="Write a comment... use @username to mention"></textarea>
+                    <div style="margin-top:8px;">
+                        <button class="btn btn-primary" id="postCommentBtn">Post Comment</button>
+                    </div>
+                </div>
+                <div id="commentsList">
+                    <div class="loader"></div>
+                </div>
+                <div class="pagination" id="commentsPagination"></div>
+            </section>
+
+            <section id="tab-dependencies" style="display:none;">
+                <div id="depsList">
+                    <div class="loader"></div>
+                </div>
+                <div class="pagination" id="depsPagination"></div>
+            </section>
+
+            <section id="tab-tags" style="display:none;">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Task Tags</div>
+                        <button class="btn btn-secondary btn-sm" id="manageTagsBtn">+ Add Tags</button>
+                    </div>
+                    <div id="taskTagsList">
+                        <div class="loader"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Subtask modal -->
+    <div class="modal-overlay" id="subtaskModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="subtaskModalTitle">New Subtask</h2>
+                <button class="btn-icon" onclick="modalClose('subtaskModal')">✕</button>
+            </div>
+            <form id="subtaskForm">
+                <input type="hidden" id="subtaskId">
+                <div class="form-group">
+                    <label>Title</label>
+                    <input class="form-control" type="text" id="subtaskTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea class="form-control" id="subtaskDesc" rows="3"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select class="form-control" id="subtaskPriority">
+                            <option value="">Default</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Due Value</label>
+                        <input class="form-control" type="number" id="subtaskDueValue" min="1">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Due Unit</label>
+                    <select class="form-control" id="subtaskDueUnit">
+                        <option value="">—</option>
+                        <option value="minutes">Minutes</option>
+                        <option value="hours">Hours</option>
+                        <option value="days">Days</option>
+                        <option value="weeks">Weeks</option>
+                        <option value="months">Months</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="modalClose('subtaskModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add tags modal -->
+    <div class="modal-overlay" id="tagsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Add Tags</h2>
+                <button class="btn-icon" onclick="modalClose('tagsModal')">✕</button>
+            </div>
+            <div class="form-group">
+                <label>Available Tags (multi-select)</label>
+                <select class="form-control" id="availableTags" multiple size="8" style="min-height:180px;"></select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="modalClose('tagsModal')">Cancel</button>
+                <button type="button" class="btn btn-primary" id="addTagsSubmit">Add</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/task.js"></script>
+</body>
+
+</html>

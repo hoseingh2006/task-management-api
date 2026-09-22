@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="sidebar-backdrop"></div>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">📋 PM App</div>
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" data-name="dashboard">🏠 Dashboard</a></li>
+                <li><a href="projects.html" data-name="projects">📁 Projects</a></li>
+                <li><a href="notifications.html" data-name="notifications">🔔 Notifications</a></li>
+                <li><a href="profile.html" data-name="profile">👤 Profile</a></li>
+                <li><a href="admin.html" data-name="admin" id="adminLink">⚙️ Admin</a></li>
+                <li><a href="#" id="logoutBtn">🚪 Logout</a></li>
+            </ul>
+        </aside>
+
+        <main class="main">
+            <div class="topbar">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button class="menu-toggle">☰</button>
+                    <h1>Admin Panel</h1>
+                </div>
+                <div class="user-menu">
+                    <div class="avatar" id="userAvatar">?</div>
+                    <span id="userName">...</span>
+                </div>
+            </div>
+
+            <div class="stats-grid" id="adminStats"></div>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="users">Users</button>
+                <button class="tab" data-tab="projects">Projects</button>
+                <button class="tab" data-tab="tasks">Tasks</button>
+                <button class="tab" data-tab="tags">Global Tags</button>
+                <button class="tab" data-tab="logs">Activity Logs</button>
+            </div>
+
+            <section id="tab-users">
+                <div class="filter-bar">
+                    <select class="form-control" id="userRoleFilter">
+                        <option value="">All Roles</option>
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <select class="form-control" id="userActiveFilter">
+                        <option value="">All</option>
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                    </select>
+                </div>
+                <div id="usersList">
+                    <div class="loader"></div>
+                </div>
+                <div class="pagination" id="usersPagination"></div>
+            </section>
+
+            <section id="tab-projects" style="display:none;">
+                <div class="filter-bar">
+                    <select class="form-control" id="projStatusFilter">
+                        <option value="">All Statuses</option>
+                        <option value="active">Active</option>
+                        <option value="completed">Completed</option>
+                        <option value="archived">Archived</option>
+                    </select>
+                </div>
+                <div id="projectsList2">
+                    <div class="loader"></div>
+                </div>
+                <div class="pagination" id="projectsPagination"></div>
+            </section>
+
+            <section id="tab-tasks" style="display:none;">
+                <div class="filter-bar">
+                    <select class="form-control" id="taskStatusFilter2">
+                        <option value="">All Statuses</option>
+                        <option value="active">Active</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="expire">Expire</option>
+                        <option value="archived">Archived</option>
+                    </select>
+                    <select class="form-control" id="taskPriorityFilter2">
+                        <option value="">All Priorities</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                </div>
+                <div id="tasksList2">
+                    <div class="loader"></div>
+                </div>
+                <div class="pagination" id="tasksPagination2"></div>
+            </section>
+
+            <section id="tab-tags" style="display:none;">
+                <div class="filter-bar">
+                    <input class="form-control" id="newGlobalTag" placeholder="Tag name">
+                    <button class="btn btn-primary" id="createGlobalTagBtn">+ Create Global Tag</button>
+                </div>
+                <div id="tagsList2">
+                    <div class="loader"></div>
+                </div>
+                <div class="pagination" id="tagsPagination2"></div>
+            </section>
+
+            <section id="tab-logs" style="display:none;">
+                <div class="filter-bar">
+                    <select class="form-control" id="logRoleFilter">
+                        <option value="">All Roles</option>
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div id="logsList">
+                    <div class="loader"></div>
+                </div>
+                <div class="pagination" id="logsPagination"></div>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+
+</html>

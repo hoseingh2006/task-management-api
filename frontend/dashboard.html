@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="sidebar-backdrop"></div>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">📋 PM App</div>
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" data-name="dashboard">🏠 Dashboard</a></li>
+                <li><a href="projects.html" data-name="projects">📁 Projects</a></li>
+                <li><a href="notifications.html" data-name="notifications">🔔 Notifications</a></li>
+                <li><a href="profile.html" data-name="profile">👤 Profile</a></li>
+                <li><a href="admin.html" data-name="admin" id="adminLink" style="display:none;">⚙️ Admin</a></li>
+                <li><a href="#" id="logoutBtn">🚪 Logout</a></li>
+            </ul>
+        </aside>
+
+        <main class="main">
+            <div class="topbar">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button class="menu-toggle">☰</button>
+                    <h1>Dashboard</h1>
+                </div>
+                <div class="user-menu">
+                    <div class="avatar" id="userAvatar">?</div>
+                    <span id="userName">Loading...</span>
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">My Projects</div>
+                    <div class="stat-value" id="statProjects">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active</div>
+                    <div class="stat-value" id="statActive">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Completed</div>
+                    <div class="stat-value" id="statCompleted">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Archived</div>
+                    <div class="stat-value" id="statArchived">-</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Recent Projects</h2>
+                    <a href="projects.html" class="btn btn-secondary btn-sm">View All</a>
+                </div>
+                <div id="recentProjects">
+                    <div class="loader"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Quick Actions</h2>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="btn btn-primary" id="newProjectBtn">+ New Project</button>
+                    <a class="btn btn-secondary" href="projects.html">📁 All Projects</a>
+                    <a class="btn btn-secondary" href="notifications.html">🔔 Notifications</a>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- New project modal -->
+    <div class="modal-overlay" id="projectModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>New Project</h2>
+                <button class="btn-icon" onclick="modalClose('projectModal')">✕</button>
+            </div>
+            <form id="newProjectForm">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input class="form-control" type="text" id="projName" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea class="form-control" id="projDesc" rows="3"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="modalClose('projectModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+
+</html>

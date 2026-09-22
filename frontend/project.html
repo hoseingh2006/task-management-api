@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="sidebar-backdrop"></div>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">📋 PM App</div>
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" data-name="dashboard">🏠 Dashboard</a></li>
+                <li><a href="projects.html" data-name="projects">📁 Projects</a></li>
+                <li><a href="notifications.html" data-name="notifications">🔔 Notifications</a></li>
+                <li><a href="profile.html" data-name="profile">👤 Profile</a></li>
+                <li><a href="admin.html" data-name="admin" id="adminLink" style="display:none;">⚙️ Admin</a></li>
+                <li><a href="#" id="logoutBtn">🚪 Logout</a></li>
+            </ul>
+        </aside>
+
+        <main class="main">
+            <div class="topbar">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button class="menu-toggle">☰</button>
+                    <h1 id="projectTitle">Loading...</h1>
+                </div>
+                <div class="user-menu">
+                    <div class="avatar" id="userAvatar">?</div>
+                    <span id="userName">...</span>
+                </div>
+            </div>
+
+            <div id="projectInfo"></div>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="tasks">Tasks</button>
+                <button class="tab" data-tab="members">Members</button>
+                <button class="tab" data-tab="tags">Tags</button>
+            </div>
+
+            <!-- Tasks tab -->
+            <section id="tab-tasks">
+                <div class="filter-bar">
+                    <select class="form-control" id="taskStatusFilter">
+                        <option value="">All Statuses</option>
+                        <option value="active">Active</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="expire">Expire</option>
+                    </select>
+                    <select class="form-control" id="taskPriorityFilter">
+                        <option value="">All Priorities</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                    <button class="btn btn-primary" id="newTaskBtn">+ New Task</button>
+                </div>
+                <div id="tasksList">
+                    <div class="loader"></div>
+                </div>
+                <div class="pagination" id="tasksPagination"></div>
+            </section>
+
+            <!-- Members tab -->
+            <section id="tab-members" style="display:none;">
+                <div class="filter-bar">
+                    <button class="btn btn-primary" id="addMemberBtn">+ Add Member</button>
+                </div>
+                <div id="membersList">
+                    <div class="loader"></div>
+                </div>
+                <div class="pagination" id="membersPagination"></div>
+            </section>
+
+            <!-- Tags tab -->
+            <section id="tab-tags" style="display:none;">
+                <div class="filter-bar">
+                    <button class="btn btn-primary" id="newTagBtn">+ New Tag</button>
+                </div>
+                <div id="tagsList">
+                    <div class="loader"></div>
+                </div>
+                <div class="pagination" id="tagsPagination"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Task modal -->
+    <div class="modal-overlay" id="taskModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="taskModalTitle">New Task</h2>
+                <button class="btn-icon" onclick="modalClose('taskModal')">✕</button>
+            </div>
+            <form id="taskForm">
+                <input type="hidden" id="taskId">
+                <div class="form-group">
+                    <label>Title</label>
+                    <input class="form-control" type="text" id="taskTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea class="form-control" id="taskDesc" rows="3"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select class="form-control" id="taskPriority">
+                            <option value="">Default</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Status (edit)</label>
+                        <select class="form-control" id="taskStatus">
+                            <option value="">—</option>
+                            <option value="active">Active</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                            <option value="expire">Expire</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Due Value</label>
+                        <input class="form-control" type="number" id="taskDueValue" min="1" placeholder="e.g. 3">
+                    </div>
+                    <div class="form-group">
+                        <label>Due Unit</label>
+                        <select class="form-control" id="taskDueUnit">
+                            <option value="">—</option>
+                            <option value="minutes">Minutes</option>
+                            <option value="hours">Hours</option>
+                            <option value="days">Days</option>
+                            <option value="weeks">Weeks</option>
+                            <option value="months">Months</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Assignees</label>
+                    <select class="form-control" id="taskAssignees" multiple size="4" style="min-height:90px;"></select>
+                </div>
+                <div class="form-group" id="taskTagsGroup">
+                    <label>Tags</label>
+                    <select class="form-control" id="taskTags" multiple size="4" style="min-height:90px;"></select>
+                </div>
+                <div class="form-group">
+                    <label>Dependencies (task IDs)</label>
+                    <input class="form-control" type="text" id="taskDeps"
+                        placeholder="Comma-separated task IDs, e.g. 1,2,3">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="modalClose('taskModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="taskSubmitBtn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Member modal -->
+    <div class="modal-overlay" id="memberModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Add Member</h2>
+                <button class="btn-icon" onclick="modalClose('memberModal')">✕</button>
+            </div>
+            <form id="memberForm">
+                <div class="form-group">
+                    <label>User ID</label>
+                    <input class="form-control" type="number" id="memberUserId" required min="1">
+                </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <select class="form-control" id="memberRole" required>
+                        <option value="member">Member</option>
+                        <option value="manager">Manager</option>
+                        <option value="viewer">Viewer</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="modalClose('memberModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tag modal -->
+    <div class="modal-overlay" id="tagModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="tagModalTitle">New Tag</h2>
+                <button class="btn-icon" onclick="modalClose('tagModal')">✕</button>
+            </div>
+            <form id="tagForm">
+                <input type="hidden" id="tagId">
+                <div class="form-group">
+                    <label>Tag Name</label>
+                    <input class="form-control" type="text" id="tagName" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="modalClose('tagModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Project Status modal -->
+    <div class="modal-overlay" id="statusModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Change Project Status</h2>
+                <button class="btn-icon" onclick="modalClose('statusModal')">✕</button>
+            </div>
+            <p style="font-size:14px;color:var(--gray-500);margin-bottom:18px;">
+                Current status:
+                <span id="currentStatusBadge"></span>
+            </p>
+
+            <div id="statusOptions" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+                <label class="status-option" data-status="active">
+                    <input type="radio" name="projStatus" value="active">
+                    <div>
+                        <strong>Active</strong>
+                        <div style="font-size:12px;color:var(--gray-500);">
+                            Project is ongoing and everyone can work on it.
+                        </div>
+                    </div>
+                </label>
+
+                <label class="status-option" data-status="completed">
+                    <input type="radio" name="projStatus" value="completed">
+                    <div>
+                        <strong>Completed</strong>
+                        <div style="font-size:12px;color:var(--gray-500);">
+                            Project has been finished successfully.
+                        </div>
+                    </div>
+                </label>
+
+                <label class="status-option" data-status="archived">
+                    <input type="radio" name="projStatus" value="archived">
+                    <div>
+                        <strong>Archived</strong>
+                        <div style="font-size:12px;color:var(--gray-500);">
+                            Project is archived and read-only.
+                        </div>
+                    </div>
+                </label>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="modalClose('statusModal')">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmStatusBtn">Update Status</button>
+            </div>
+        </div>
+    </div>
+    <!-- Task Status modal -->
+    <div class="modal-overlay" id="taskStatusModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Change Task Status</h2>
+                <button class="btn-icon" onclick="modalClose('taskStatusModal')">✕</button>
+            </div>
+
+            <p style="font-size:14px;color:var(--gray-500);margin-bottom:16px;">
+                Task: <strong id="taskStatusTaskTitle"></strong>
+            </p>
+
+            <p style="font-size:14px;color:var(--gray-500);margin-bottom:10px;">
+                Current status: <span id="taskCurrentStatusBadge"></span>
+            </p>
+
+            <div id="taskStatusOptions" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+                <label class="status-option" data-status="active">
+                    <input type="radio" name="taskStatusRadio" value="active">
+                    <div>
+                        <strong>Active</strong>
+                        <div style="font-size:12px;color:var(--gray-500);">
+                            Task is open and ready to be worked on.
+                        </div>
+                    </div>
+                </label>
+
+                <label class="status-option" data-status="in_progress">
+                    <input type="radio" name="taskStatusRadio" value="in_progress">
+                    <div>
+                        <strong>In Progress</strong>
+                        <div style="font-size:12px;color:var(--gray-500);">
+                            Task is currently being worked on.
+                        </div>
+                    </div>
+                </label>
+
+                <label class="status-option" data-status="completed">
+                    <input type="radio" name="taskStatusRadio" value="completed">
+                    <div>
+                        <strong>Completed</strong>
+                        <div style="font-size:12px;color:var(--gray-500);">
+                            Task is finished. Dependencies must be completed first.
+                        </div>
+                    </div>
+                </label>
+
+                <label class="status-option" data-status="cancelled">
+                    <input type="radio" name="taskStatusRadio" value="cancelled">
+                    <div>
+                        <strong>Cancelled</strong>
+                        <div style="font-size:12px;color:var(--gray-500);">
+                            Task is no longer needed.
+                        </div>
+                    </div>
+                </label>
+
+                <label class="status-option" data-status="expire">
+                    <input type="radio" name="taskStatusRadio" value="expire">
+                    <div>
+                        <strong>Expire</strong>
+                        <div style="font-size:12px;color:var(--gray-500);">
+                            Task deadline has passed. (handled automatically)
+                        </div>
+                    </div>
+                </label>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="modalClose('taskStatusModal')">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmTaskStatusBtn">Update Status</button>
+            </div>
+        </div>
+    </div>
+    <script src="js/api.js"></script>
+    <script src="js/project.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifications</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="sidebar-backdrop"></div>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">📋 PM App</div>
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" data-name="dashboard">🏠 Dashboard</a></li>
+                <li><a href="projects.html" data-name="projects">📁 Projects</a></li>
+                <li><a href="notifications.html" data-name="notifications">🔔 Notifications</a></li>
+                <li><a href="profile.html" data-name="profile">👤 Profile</a></li>
+                <li><a href="admin.html" data-name="admin" id="adminLink" style="display:none;">⚙️ Admin</a></li>
+                <li><a href="#" id="logoutBtn">🚪 Logout</a></li>
+            </ul>
+        </aside>
+
+        <main class="main">
+            <div class="topbar">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button class="menu-toggle">☰</button>
+                    <h1>Notifications</h1>
+                </div>
+                <div class="user-menu">
+                    <div class="avatar" id="userAvatar">?</div>
+                    <span id="userName">...</span>
+                </div>
+            </div>
+
+            <div class="filter-bar">
+                <select class="form-control" id="notifProjectSelect">
+                    <option value="">All Projects</option>
+                </select>
+                <select class="form-control" id="notifTypeFilter">
+                    <option value="">All Types</option>
+                    <option value="mention">Mention</option>
+                    <option value="task_assigned">Task Assigned</option>
+                    <option value="task_status_changed">Task Status Changed</option>
+                    <option value="task_updated">Task Updated</option>
+                    <option value="comment_created">Comment Created</option>
+                    <option value="member_added">Member Added</option>
+                    <option value="member_removed">Member Removed</option>
+                    <option value="member_role_changed">Member Role Changed</option>
+                    <option value="project_status_changed">Project Status Changed</option>
+                    <option value="dependency_added">Dependency Added</option>
+                    <option value="dependency_removed">Dependency Removed</option>
+                </select>
+                <button class="btn btn-secondary" id="markAllReadBtn">Mark All Read</button>
+            </div>
+
+            <div id="notificationsList">
+                <div class="loader"></div>
+            </div>
+            <div class="pagination" id="notifPagination"></div>
+        </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/notifications.js"></script>
+</body>
+
+</html>
