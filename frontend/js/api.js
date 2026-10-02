@@ -1,5 +1,5 @@
 // ============ API Layer ============
-const API_BASE = 'http://localhost:8000'; // change if needed
+const API_BASE = '/api'; // change if needed
 
 const Auth = {
   getToken() { return localStorage.getItem('token'); },
