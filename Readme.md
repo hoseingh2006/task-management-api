@@ -1,10 +1,10 @@
 # 🚀 Task Management API
 
-A full-featured **Task Management System** built with **FastAPI**, **PostgreSQL**, **SQLAlchemy**, **Alembic**, and **Docker**.
+A full-featured **Task Management System** built with **FastAPI**, **PostgreSQL**, **SQLAlchemy**, **Alembic**, **Nginx**, and **Docker**.
 
 The project provides a complete backend for managing projects, tasks, members, roles, tags, subtasks, comments, dependencies, notifications, administration, logging, filtering, sorting, and pagination.
 
-A simple frontend is also included for interacting with the API.
+A simple frontend is also included for interacting with the API, served through Nginx.
 
 > **Note:** The frontend interface was generated with the assistance of AI.
 
@@ -32,8 +32,11 @@ A simple frontend is also included for interacting with the API.
 - 🗃️ Soft delete for projects and tasks
 - 🐘 PostgreSQL database
 - 🐳 Docker & Docker Compose
+- 🌐 Nginx reverse proxy with HTTPS
+- ⚖️ Load balancing across multiple backend instances
+- 🚦 Rate limiting on API endpoints
 - 🔄 Database migrations with Alembic
-- 🌐 Simple frontend
+- 🖥️ Simple frontend
 
 ---
 
@@ -55,12 +58,13 @@ A simple frontend is also included for interacting with the API.
 - HTML
 - CSS
 - JavaScript
-- Python HTTP Server
+- Served via Nginx
 
 ### DevOps
 
 - Docker
 - Docker Compose
+- Nginx (reverse proxy, HTTPS, load balancing, rate limiting)
 
 ---
 
@@ -69,19 +73,19 @@ A simple frontend is also included for interacting with the API.
 The backend follows a layered architecture designed to keep business logic separated from HTTP and database concerns.
 
 ```text
-Frontend
+Frontend (Nginx)
    │
    ▼
-FastAPI Routers
+Nginx Reverse Proxy (HTTPS + Load Balancing)
    │
-   ▼
-Service Layer
-   │
-   ▼
-SQLAlchemy
-   │
-   ▼
-PostgreSQL
+   ├──────────────┬──────────────┐
+   ▼              ▼              ▼
+Backend1       Backend2       Backend3
+   │              │              │
+   └──────────────┴──────────────┘
+                  │
+                  ▼
+             PostgreSQL
 ```
 
 The project also separates:
@@ -131,6 +135,31 @@ No local Python or PostgreSQL installation is required.
 
 ---
 
+# 🔐 SSL Certificates
+
+The Nginx container serves traffic over HTTPS and expects SSL certificates at:
+
+```text
+./certs/server.crt
+./certs/server.key
+```
+
+Create a local `certs/` directory in the project root and place your certificate and key there.
+
+For local development, you can generate a self-signed certificate:
+
+```bash
+mkdir -p certs
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout certs/server.key \
+  -out certs/server.crt \
+  -subj "/CN=localhost"
+```
+
+The `certs/` directory is mounted read-only into the Nginx container via Docker Compose.
+
+---
+
 # ▶️ Run the Project
 
 Clone the repository:
@@ -140,7 +169,7 @@ git clone <YOUR_REPOSITORY_URL>
 cd <PROJECT_DIRECTORY>
 ```
 
-Then start the application:
+Make sure the SSL certificates exist (see the section above), then start the application:
 
 ```bash
 docker compose up -d
@@ -149,17 +178,22 @@ docker compose up -d
 Docker Compose will build and start:
 
 - PostgreSQL
-- Backend
-- Frontend
+- Migration service (runs `alembic upgrade head` automatically)
+- Backend 1
+- Backend 2
+- Backend 3
+- Nginx (frontend + reverse proxy)
+
+The migration service runs automatically before the backends start, so no manual migration step is required. However, you can still run migrations manually if needed (see below).
 
 ---
 
-# 🗄️ Run Database Migrations
+# 🗄️ Run Database Migrations Manually (Optional)
 
-After the containers are created and the backend is running, enter the backend container:
+Migrations are applied automatically by the `migrate` service on startup. If you want to run them manually, enter one of the backend containers:
 
 ```bash
-docker exec -it backend bash
+docker exec -it <backend_container_name> bash
 ```
 
 Then run:
@@ -168,43 +202,67 @@ Then run:
 alembic upgrade head
 ```
 
-After the migration finishes, the database is ready.
-
 You can exit the container with:
 
 ```bash
 exit
 ```
 
-> **That's all you need to do to run the project.**
-
 ---
 
 # 🌐 Access the Application
 
-### Frontend
+### Frontend (HTTPS)
 
 ```text
-http://localhost
+https://localhost
 ```
 
-### Backend
+> HTTP requests on port 80 are automatically redirected to HTTPS.
+
+### Backend API (through Nginx)
 
 ```text
-http://localhost:8000
+https://localhost/api/
 ```
 
 ### FastAPI Swagger Documentation
 
+Because the API is proxied through Nginx under `/api/`, Swagger is available at:
+
 ```text
-http://localhost:8000/docs
+https://localhost/api/docs
 ```
 
 ### ReDoc
 
 ```text
-http://localhost:8000/redoc
+https://localhost/api/redoc
 ```
+
+> Direct backend access is not exposed to the host; all traffic goes through Nginx.
+
+---
+
+# 🛡️ Nginx Reverse Proxy
+
+Nginx acts as the entry point for the whole application and provides:
+
+- **HTTPS termination** with TLS 1.2 / TLS 1.3
+- **HTTP → HTTPS redirect**
+- **HTTP/2** support
+- **Static file serving** for the frontend (`/usr/share/nginx/html`)
+- **Reverse proxy** for the backend under the `/api/` path
+- **Load balancing** across three backend instances (`backend1`, `backend2`, `backend3`)
+- **Rate limiting** on API endpoints (`2r/s` per IP with a burst of 5)
+- **Security headers**:
+  - `Strict-Transport-Security`
+  - `X-Content-Type-Options`
+  - `X-Frame-Options`
+  - `Referrer-Policy`
+- **Server token hiding** (`server_tokens off`)
+
+The frontend uses the relative `API_BASE = '/api'`, so all API calls are automatically proxied through Nginx.
 
 ---
 
@@ -215,7 +273,7 @@ The API uses **JWT Bearer Authentication**.
 First obtain an access token:
 
 ```http
-POST /token
+POST /api/token
 ```
 
 Then send the token with authenticated requests:
@@ -246,6 +304,8 @@ Permissions are enforced by the backend based on the user's role within the proj
 # 📡 API Overview
 
 The API contains **71 endpoints** covering authentication, users, projects, tasks, administration, notifications, comments and more.
+
+> All endpoints below are accessed through Nginx with the `/api` prefix (e.g. `/api/token`, `/api/project/`, `/api/admin/users`).
 
 ## Authentication
 
@@ -495,7 +555,7 @@ desc
 Example:
 
 ```http
-GET /project/1/task?page=2&page_size=20&sort_by=created_at&sort_order=desc
+GET /api/project/1/task?page=2&page_size=20&sort_by=created_at&sort_order=desc
 ```
 
 Several list endpoints also provide domain-specific filters such as:
@@ -532,10 +592,10 @@ Database migrations are managed with:
 Alembic
 ```
 
-After starting the containers, migrations can be applied with:
+Migrations run automatically on startup through the `migrate` Docker Compose service. Manual execution is also possible:
 
 ```bash
-docker exec -it backend bash
+docker exec -it <backend_container_name> bash
 ```
 
 and:
@@ -544,42 +604,47 @@ and:
 alembic upgrade head
 ```
 
+The PostgreSQL database uses a persistent Docker volume (`postgres-data`) so data survives container recreation.
+
 ---
 
 # 🐳 Docker Architecture
 
-The application runs as three Docker services:
+The application runs as multiple Docker services:
 
 ```text
-                 ┌──────────────┐
-                 │   Frontend   │
-                 │   Port: 80   │
-                 └──────┬───────┘
-                        │
-                        ▼
-                 ┌──────────────┐
-                 │   Backend    │
-                 │  Port: 8000  │
-                 └──────┬───────┘
-                        │
-                        ▼
-                 ┌──────────────┐
-                 │  PostgreSQL  │
-                 │  Port: 5432  │
-                 └──────────────┘
+                        ┌──────────────┐
+                        │   Frontend   │
+                        │   (Nginx)    │
+                        │  443 / 80    │
+                        └──────┬───────┘
+                               │
+                               ▼
+                    ┌────────────────────┐
+                    │   Nginx Reverse    │
+                    │   Proxy + LB       │
+                    │   + Rate Limiting  │
+                    └──────┬─────────────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        ▼                  ▼                  ▼
+  ┌──────────┐       ┌──────────┐       ┌──────────┐
+  │ Backend1 │       │ Backend2 │       │ Backend3 │
+  │ Port 8000│       │ Port 8000│       │ Port 8000│
+  └────┬─────┘       └────┬─────┘       └────┬─────┘
+       └──────────────────┼──────────────────┘
+                          ▼
+                   ┌──────────────┐
+                   │  PostgreSQL  │
+                   │  Port 5432   │
+                   └──────────────┘
 ```
 
-Docker Compose creates a dedicated network for communication between the services.
+Docker Compose creates a dedicated network (`Taskmanager`) for communication between the services.
 
-The PostgreSQL database uses a persistent Docker volume:
+A one-shot `migrate` service runs `alembic upgrade head` after PostgreSQL becomes healthy and before the backends start. Each backend waits for the migration service to complete successfully.
 
-```text
-postgres-data
-```
-
-so database data survives container recreation.
-
-The backend waits for PostgreSQL to become healthy before starting through Docker Compose's health-check dependency configuration.
+The Nginx container mounts the `./certs` directory read-only to serve HTTPS traffic.
 
 ---
 
@@ -607,11 +672,19 @@ TaskManagementApi/
 │
 ├── frontend/
 │   ├── ...
-│   └── Dockerfile
+│   └── ...
 │
-├── docker-compose.yml
+├── certs/
+│   ├── server.crt
+│   └── server.key
+│
+├── nginx.conf
+├── Dockerfile          # Nginx image
+├── compose.yaml
 └── README.md
 ```
+
+> The root `Dockerfile` builds the Nginx image: it copies `./frontend` into `/usr/share/nginx/html/` and `nginx.conf` into `/etc/nginx/nginx.conf`.
 
 ---
 
@@ -622,7 +695,7 @@ FastAPI automatically generates interactive API documentation.
 After starting the application, open:
 
 ```text
-http://localhost:8000/docs
+https://localhost/api/docs
 ```
 
 The Swagger interface allows you to:
@@ -662,9 +735,9 @@ Potential future extensions include:
 - 🔔 Real-time notifications with WebSockets
 - 🧪 Expanded automated test coverage
 - 🔐 Refresh token system
-- 🌐 Nginx reverse proxy
 - 🚀 CI/CD with GitHub Actions
-- 📈 Monitoring and metrics
+- 📈 Monitoring and metrics (Prometheus / Grafana)
+- 🔑 Automatic Let's Encrypt certificate renewal
 
 ---
 
@@ -691,7 +764,13 @@ docker compose logs -f
 To view backend logs only:
 
 ```bash
-docker compose logs -f backend
+docker compose logs -f backend1
+```
+
+To view Nginx logs:
+
+```bash
+docker compose logs -f nginx
 ```
 
 ---
@@ -706,4 +785,4 @@ This project is intended as a personal backend development project and portfolio
 
 AI tools were used during the development process, including assistance with parts of the frontend implementation.
 
-The backend architecture, API design, database models, business logic, authentication, authorization, Docker configuration, and project implementation were developed as part of the project's development process.
+The backend architecture, API design, database models, business logic, authentication, authorization, Docker configuration, Nginx configuration, and project implementation were developed as part of the project's development process.
